@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/theme/app_theme.dart';
-import 'navigation/sleepsense_shell.dart';
+import '../features/splash/presentation/screens/splash_screen.dart';
 
 class SleepSenseApp extends StatelessWidget {
   const SleepSenseApp({super.key});
@@ -12,7 +12,7 @@ class SleepSenseApp extends StatelessWidget {
       title: 'SleepSense',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
-      home: const SleepSenseShell(),
+      home: const SplashScreen(),
     );
   }
 }

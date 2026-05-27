@@ -2,10 +2,47 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:sleepsense_app/app/sleepsense_app.dart';
+import 'package:sleepsense_app/features/splash/presentation/screens/splash_screen.dart';
+
+Future<void> pumpPastSplash(WidgetTester tester) async {
+  await tester.pump(SplashScreen.duration);
+  await tester.pumpAndSettle();
+}
+
+Future<void> pumpPastSetup(WidgetTester tester) async {
+  await tester.tap(find.text('Skip for now'));
+  await tester.pumpAndSettle();
+}
 
 void main() {
+  testWidgets('shows the SleepSense splash screen first', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const SleepSenseApp());
+
+    expect(find.text('SleepSense'), findsOneWidget);
+    expect(find.text('Smarter room. Better sleep.'), findsOneWidget);
+    expect(find.text('Bedroom environment\nmonitor'), findsOneWidget);
+    expect(find.text('Preparing your sleep space...'), findsOneWidget);
+  });
+
+  testWidgets('shows setup start screen after splash', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const SleepSenseApp());
+    await pumpPastSplash(tester);
+
+    expect(find.text('SLEEPSENSE SETUP'), findsOneWidget);
+    expect(find.text('Set up your\nSleepSense'), findsOneWidget);
+    expect(find.text("What you'll set up"), findsOneWidget);
+    expect(find.text('Start Setup'), findsOneWidget);
+    expect(find.text('Skip for now'), findsOneWidget);
+  });
+
   testWidgets('shows the SleepSense dashboard', (WidgetTester tester) async {
     await tester.pumpWidget(const SleepSenseApp());
+    await pumpPastSplash(tester);
+    await pumpPastSetup(tester);
 
     expect(find.text('Bedroom'), findsOneWidget);
     expect(find.text('Sleep Environment Score'), findsOneWidget);
@@ -22,6 +59,8 @@ void main() {
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const SleepSenseApp());
+    await pumpPastSplash(tester);
+    await pumpPastSetup(tester);
 
     await tester.tap(find.text('Sleep'));
     await tester.pumpAndSettle();
@@ -36,6 +75,8 @@ void main() {
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const SleepSenseApp());
+    await pumpPastSplash(tester);
+    await pumpPastSetup(tester);
 
     await tester.tap(find.text('Stats'));
     await tester.pumpAndSettle();
@@ -55,6 +96,8 @@ void main() {
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const SleepSenseApp());
+    await pumpPastSplash(tester);
+    await pumpPastSetup(tester);
 
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
