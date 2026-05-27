@@ -50,4 +50,27 @@ void main() {
 
     expect(find.text('Insight'), findsOneWidget);
   });
+
+  testWidgets('opens the settings screen without profile or sign out', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const SleepSenseApp());
+
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('SleepSense'), findsOneWidget);
+    expect(find.text('ROOM'), findsOneWidget);
+    expect(find.text('DEVICE'), findsOneWidget);
+    expect(find.text('Critical Alerts'), findsOneWidget);
+    expect(find.text('My Profile'), findsNothing);
+    expect(find.text('Sign Out'), findsNothing);
+
+    await tester.drag(find.byType(Scrollable), const Offset(0, -900));
+    await tester.pumpAndSettle();
+
+    expect(find.text('THRESHOLDS'), findsOneWidget);
+    expect(find.text('ABOUT'), findsOneWidget);
+    expect(find.text('App Version'), findsOneWidget);
+  });
 }

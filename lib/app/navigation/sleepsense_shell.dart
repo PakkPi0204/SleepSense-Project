@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../features/dashboard/presentation/screens/home_dashboard_screen.dart';
+import '../../features/settings/presentation/screens/settings_screen.dart';
 import '../../features/sleep/presentation/screens/sleep_screen.dart';
 import '../../features/stats/presentation/screens/stats_screen.dart';
 import '../../shared/presentation/widgets/sleepsense_bottom_nav_bar.dart';
@@ -29,7 +30,7 @@ class _SleepSenseShellState extends State<SleepSenseShell> {
               HomeDashboardScreen(),
               StatsScreen(),
               SleepScreen(),
-              _ComingSoonScreen(title: 'Settings'),
+              SettingsScreen(),
             ],
           ),
           Positioned(
@@ -47,29 +48,6 @@ class _SleepSenseShellState extends State<SleepSenseShell> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _ComingSoonScreen extends StatelessWidget {
-  final String title;
-
-  const _ComingSoonScreen({required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.primary,
-      body: Center(
-        child: Text(
-          title,
-          style: const TextStyle(
-            color: AppColors.white,
-            fontSize: 32,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
       ),
     );
   }
