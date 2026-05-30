@@ -112,7 +112,11 @@ void main() {
     await tester.drag(find.byType(Scrollable), const Offset(0, -900));
     await tester.pumpAndSettle();
 
-    expect(find.text('THRESHOLDS'), findsOneWidget);
+    expect(find.text('THRESHOLDS'), findsNothing);
+    expect(find.text('CO₂ Limit'), findsNothing);
+    expect(find.text('Temperature Range'), findsNothing);
+    expect(find.text('Humidity Range'), findsNothing);
+    expect(find.text('PM2.5 Limit'), findsNothing);
     expect(find.text('ABOUT'), findsOneWidget);
     expect(find.text('App Version'), findsOneWidget);
   });

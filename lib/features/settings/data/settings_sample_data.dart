@@ -67,35 +67,6 @@ const settingsSections = [
     ],
   ),
   SettingsSection(
-    title: 'THRESHOLDS',
-    rows: [
-      SettingsRowData(
-        icon: Icons.air_rounded,
-        title: 'CO₂ Limit',
-        value: '900 ppm',
-        type: SettingsRowType.navigation,
-      ),
-      SettingsRowData(
-        icon: Icons.thermostat_outlined,
-        title: 'Temperature Range',
-        value: '18 - 24 °C',
-        type: SettingsRowType.navigation,
-      ),
-      SettingsRowData(
-        icon: Icons.water_drop_outlined,
-        title: 'Humidity Range',
-        value: '40 - 60 %',
-        type: SettingsRowType.navigation,
-      ),
-      SettingsRowData(
-        icon: Icons.bolt_outlined,
-        title: 'PM2.5 Limit',
-        value: '25 μg/m³',
-        type: SettingsRowType.navigation,
-      ),
-    ],
-  ),
-  SettingsSection(
     title: 'ABOUT',
     rows: [
       SettingsRowData(
