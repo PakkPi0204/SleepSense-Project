@@ -64,6 +64,20 @@ class ApiService {
     return const [];
   }
 
+  /// ลบ morning report ทีละรายการ
+  Future<bool> deleteReport(String reportId) async {
+    try {
+      final res = await _client
+          .delete(Uri.parse(ApiConfig.reportDelete(reportId)))
+          .timeout(timeout);
+      if (res.statusCode != 200) return false;
+      final body = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
+      return body['success'] == true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   // ──────────────────────────────────────────────
   /// ยิง GET แล้ว unwrap { success, message, data }
   Future<dynamic> _getData(String url) async {

@@ -86,6 +86,21 @@ public class MorningReportService {
         }
     }
 
+    /**
+     * ลบ morning report ตาม id (สำหรับปุ่มลบในแอป)
+     */
+    public boolean deleteById(String reportId) {
+        try {
+            Firestore db = FirestoreClient.getFirestore();
+            db.collection(COLLECTION).document(reportId).delete().get();
+            log.info("ลบ morning report: {}", reportId);
+            return true;
+        } catch (Exception e) {
+            log.error("ลบ morning report {} ล้มเหลว", reportId, e);
+            return false;
+        }
+    }
+
     // ──────────────────────────────────────────────
     private Map<String, Object> toMap(MorningReport r) {
         Map<String, Object> m = new HashMap<>();

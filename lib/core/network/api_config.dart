@@ -42,4 +42,5 @@ class ApiConfig {
   static String reportLatest(String id) => '$baseUrl/api/report/latest?deviceId=$id';
   static String reportHistory(String id, {int limit = 30}) =>
       '$baseUrl/api/report/history?deviceId=$id&limit=$limit';
+  static String reportDelete(String reportId) => '$baseUrl/api/report/$reportId';
 }

@@ -4,6 +4,7 @@ import '../../core/theme/app_colors.dart';
 import '../../features/dashboard/presentation/screens/home_dashboard_screen.dart';
 import '../../features/stats/presentation/screens/stats_screen.dart';
 import '../../features/sleep/presentation/screens/sleep_screen.dart';
+import '../../features/settings/presentation/screens/settings_screen.dart';
 import '../../shared/presentation/widgets/sleepsense_bottom_nav_bar.dart';
 import 'app_tab.dart';
 
@@ -29,10 +30,7 @@ class _SleepSenseShellState extends State<SleepSenseShell> {
               HomeDashboardScreen(),
               StatsScreen(),
               SleepScreen(),
-              _ProgressPlaceholderScreen(
-                message:
-                    'Settings will be available in the next development phase.',
-              ),
+              SettingsScreen(),
             ],
           ),
           Positioned(
@@ -55,6 +53,8 @@ class _SleepSenseShellState extends State<SleepSenseShell> {
   }
 }
 
+// เก็บไว้เผื่อใช้กับหน้าที่ยังไม่เสร็จในอนาคต
+// ignore: unused_element
 class _ProgressPlaceholderScreen extends StatelessWidget {
   final String message;
 

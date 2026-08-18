@@ -26,8 +26,8 @@ class DashboardMapper {
       SensorReading(
         icon: Icons.air,
         title: 'CO₂',
-        value: '${d.co2.round()} ppm',
-        status: _co2Status(d.co2),
+        value: d.co2 <= 0 ? 'N/A' : '${d.co2.round()} ppm',
+        status: d.co2 <= 0 ? 'No sensor' : _co2Status(d.co2),
       ),
       SensorReading(
         icon: Icons.speed_outlined,
@@ -53,8 +53,10 @@ class DashboardMapper {
   /// คำนวณ environment score จากค่า sensor (0-100)
   static EnvironmentScore toEnvironmentScore(SensorDataDto d) {
     int score = 100;
-    if (d.co2 > 1000) score -= 20;
-    if (d.co2 > 2000) score -= 20;
+    if (d.co2 > 0) {
+      if (d.co2 > 1000) score -= 20;
+      if (d.co2 > 2000) score -= 20;
+    }
     if (d.temperature < 18 || d.temperature > 26) score -= 15;
     if (d.pm25 > 35) score -= 15;
     if (d.pm25 > 75) score -= 15;

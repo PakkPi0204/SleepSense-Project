@@ -57,4 +57,17 @@ public class MorningReportController {
         java.util.List<MorningReport> reports = reportService.getHistory(deviceId, limit);
         return ResponseEntity.ok(ApiResponse.ok(reports));
     }
+
+    /**
+     * DELETE /api/report/{reportId}
+     * ลบ morning report ทีละรายการ (สำหรับปุ่มลบในแอป)
+     */
+    @DeleteMapping("/{reportId}")
+    public ResponseEntity<ApiResponse<Void>> delete(@PathVariable String reportId) {
+        boolean ok = reportService.deleteById(reportId);
+        if (ok) {
+            return ResponseEntity.ok(ApiResponse.ok("Report deleted", null));
+        }
+        return ResponseEntity.ok(ApiResponse.error("Failed to delete report"));
+    }
 }

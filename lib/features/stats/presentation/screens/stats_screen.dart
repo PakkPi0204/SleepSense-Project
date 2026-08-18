@@ -51,7 +51,7 @@ class _StatsScreenState extends State<StatsScreen> {
     try {
       final reports = await _api.fetchReportHistory(limit: 30);
       setState(() {
-        _reports = reports;
+        _reports = List.of(reports);
         _loading = false;
       });
     } catch (e) {
@@ -91,7 +91,7 @@ class _StatsScreenState extends State<StatsScreen> {
                     ),
                     const SizedBox(height: 6),
                     const Text(
-                      'สถิติสภาพแวดล้อมย้อนหลังแต่ละคืน',
+                      'สถิติสภาพแวดล้อมย้อนหลังแต่ละคืน · แตะค้างเพื่อลบ',
                       style: TextStyle(color: AppColors.neutral, fontSize: 14),
                     ),
                     const SizedBox(height: 24),
@@ -132,6 +132,7 @@ class _StatsScreenState extends State<StatsScreen> {
           MaterialPageRoute(builder: (_) => ReportDetailScreen(report: r)),
         );
       },
+      onLongPress: () => _confirmDelete(r),
       child: Container(
         margin: const EdgeInsets.only(bottom: 14),
         padding: const EdgeInsets.all(18),
@@ -238,6 +239,48 @@ class _StatsScreenState extends State<StatsScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _confirmDelete(MorningReportDto r) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.card,
+        title: const Text('ลบรายงาน',
+            style: TextStyle(color: AppColors.white)),
+        content: Text(
+          'ต้องการลบรายงาน${_formatDate(r.sleepStart)} ใช่ไหม?',
+          style: const TextStyle(color: AppColors.neutral),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('ยกเลิก',
+                style: TextStyle(color: AppColors.neutral)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('ลบ',
+                style: TextStyle(color: Color(0xFFE85D5D))),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      final ok = await _api.deleteReport(r.id);
+      if (!mounted) return;
+      if (ok) {
+        setState(() => _reports.removeWhere((x) => x.id == r.id));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('ลบรายงานแล้ว')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('ลบไม่สำเร็จ ลองใหม่อีกครั้ง')),
+        );
+      }
+    }
   }
 
   String _formatDate(String iso) {

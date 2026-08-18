@@ -34,7 +34,7 @@ const char* WIFI_SSID     = "Latcharit";
 const char* WIFI_PASSWORD = "itimLOOK2547";
 
 
-const char* SERVER_URL = "http://192.168.1.2:8080/api/sensor/data";
+const char* SERVER_URL = "http://192.168.1.4:8080/api/sensor/data";
 
 const char* DEVICE_ID = "test-device-01";
 
@@ -291,7 +291,7 @@ void sendToServer(float temperature, float humidity, float co2,
   doc["deviceId"] = DEVICE_ID;
   doc["temperature"] = temperature;
   doc["humidity"] = humidity;
-  doc["co2"] = (co2 < 0) ? 400 : co2;       // ค่า fallback ถ้าอ่านไม่ได้
+  doc["co2"] = (co2 < 0) ? 0 : co2;         // ส่ง 0 เมื่ออ่านไม่ได้ (แอปจะแสดง N/A)
   doc["pm25"] = pm25;                       // จัดการค่า fallback แล้วใน collectAndSendData
   doc["lightIntensity"] = lux;
   doc["noiseLevel"] = noiseLevel;
