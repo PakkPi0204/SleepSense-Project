@@ -10,7 +10,7 @@
  *  - KY-037   : Sound/Noise level        (Analog)
  *  - PIR      : Motion detection         (Digital)
  *  - PMS5003  : PM2.5                    (UART/Serial)
- *  - MH-Z19C  : CO2                      (UART/Serial)
+ *  - SCD41    : CO2                      (I2C)
  *
  * ต้องติดตั้ง Library (Library Manager ใน Arduino IDE):
  *  - DHT sensor library (Adafruit)
@@ -27,6 +27,7 @@
 #include <Wire.h>
 #include <DHT.h>
 #include <BH1750.h>
+#include <SensirionI2CScd4x.h>
 #include <HardwareSerial.h>
 
 
@@ -51,11 +52,10 @@ const unsigned long SEND_INTERVAL_MS = 30000;
 
 // BH1750 ใช้ I2C มาตรฐาน: SDA=21, SCL=22 (ESP32 default)
 
-// PMS5003 และ MH-Z19C ใช้ Hardware Serial (UART2, UART1)
+// PMS5003 ใช้ Hardware Serial (UART2), SCD41 ใช้ I2C
 #define PMS_RX_PIN    16     // ESP32 RX <- PMS5003 TX
 #define PMS_TX_PIN    17     // ESP32 TX -> PMS5003 RX
-#define CO2_RX_PIN    25     // ESP32 RX <- MH-Z19C TX
-#define CO2_TX_PIN    26     // ESP32 TX -> MH-Z19C RX
+// CO2 (SCD41) ใช้ I2C ร่วมกับ BH1750 — SDA=GPIO21, SCL=GPIO22 (ไม่ต้องกำหนด pin แยก)
 
 // ─────────────────────────────────────────────
 // OBJECTS
@@ -64,10 +64,11 @@ DHT dht(DHT_PIN, DHT_TYPE);
 BH1750 lightMeter;
 
 HardwareSerial pmsSerial(2);  // UART2 สำหรับ PMS5003
-HardwareSerial co2Serial(1);  // UART1 สำหรับ MH-Z19C
+SensirionI2CScd4x scd4x;      // SCD41 (CO2) ผ่าน I2C
 
 unsigned long lastSendTime = 0;
 float lastValidPm25 = 0;  // เก็บค่า PM2.5 ล่าสุดที่อ่านได้ถูกต้อง
+float lastValidCo2 = 0;   // เก็บค่า CO2 ล่าสุดที่อ่านได้ถูกต้อง (SCD41)
 
 // ─────────────────────────────────────────────
 void setup() {
@@ -91,8 +92,11 @@ void setup() {
   // PMS5003 (UART2)
   pmsSerial.begin(9600, SERIAL_8N1, PMS_RX_PIN, PMS_TX_PIN);
 
-  // MH-Z19C (UART1)
-  co2Serial.begin(9600, SERIAL_8N1, CO2_RX_PIN, CO2_TX_PIN);
+  // SCD41 (CO2 via I2C)
+  // SCD41 (CO2) ผ่าน I2C
+  scd4x.begin(Wire);
+  scd4x.stopPeriodicMeasurement();   // หยุดก่อน (เผื่อค้างจากรอบก่อน)
+  scd4x.startPeriodicMeasurement();  // เริ่มวัดต่อเนื่อง (ได้ค่าใหม่ทุก ~5 วิ)
 
   connectWiFi();
 }
@@ -166,8 +170,14 @@ void collectAndSendData() {
     lastValidPm25 = pm25; // เก็บค่าที่ดีไว้ใช้รอบหน้า
   }
 
-  // ── MH-Z19C: CO2 ──
+  // ── SCD41: CO2 ──
   float co2 = readCO2();
+  // SCD41 อัปเดตทุก ~5 วิ ถ้าจังหวะนี้ยังไม่พร้อม ใช้ค่าล่าสุดแทน
+  if (co2 < 0) {
+    co2 = lastValidCo2;
+  } else {
+    lastValidCo2 = co2;
+  }
 
   // Debug print
   Serial.println("──────── Sensor Readings ────────");
@@ -241,33 +251,28 @@ float readPM25() {
 }
 
 // ─────────────────────────────────────────────
-// MH-Z19C: ขอค่า CO2 ผ่าน UART command
+// SCD41: อ่านค่า CO2 ผ่าน I2C
 // Command: FF 01 86 00 00 00 00 00 79
 // Response: FF 86 [CO2_HIGH] [CO2_LOW] ... [checksum]
 // ─────────────────────────────────────────────
 float readCO2() {
-  byte cmd[9] = {0xFF, 0x01, 0x86, 0x00, 0x00, 0x00, 0x00, 0x00, 0x79};
-  co2Serial.write(cmd, 9);
+  uint16_t co2 = 0;
+  float temp = 0.0f, humidity = 0.0f;
+  bool isDataReady = false;
 
-  byte response[9];
-  unsigned long startTime = millis();
-
-  // รอ response อย่างมาก 1 วินาที
-  while (co2Serial.available() < 9) {
-    if (millis() - startTime > 1000) {
-      Serial.println("[WARN] MH-Z19C timeout, no response");
-      return -1;
-    }
+  // เช็คว่ามีข้อมูลใหม่พร้อมไหม
+  uint16_t error = scd4x.getDataReadyFlag(isDataReady);
+  if (error || !isDataReady) {
+    return -1;  // ยังไม่มีข้อมูลใหม่ (SCD41 อัปเดตทุก ~5 วิ)
   }
 
-  co2Serial.readBytes(response, 9);
-
-  if (response[0] == 0xFF && response[1] == 0x86) {
-    int co2 = (response[2] << 8) | response[3];
-    return (float) co2;
+  error = scd4x.readMeasurement(co2, temp, humidity);
+  if (error || co2 == 0) {
+    Serial.println("[WARN] SCD41 read failed");
+    return -1;
   }
 
-  return -1;
+  return (float) co2;
 }
 
 // ─────────────────────────────────────────────
