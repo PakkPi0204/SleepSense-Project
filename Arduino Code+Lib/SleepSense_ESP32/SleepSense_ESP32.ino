@@ -27,7 +27,7 @@
 #include <Wire.h>
 #include <DHT.h>
 #include <BH1750.h>
-#include <SensirionI2CScd4x.h>
+#include <SensirionI2cScd4x.h>
 #include <HardwareSerial.h>
 
 
@@ -48,6 +48,8 @@ const unsigned long SEND_INTERVAL_MS = 30000;
 #define DHT_PIN       4      // DHT22 data pin
 #define DHT_TYPE      DHT22
 #define PIR_PIN       27     // PIR motion sensor output
+#define I2C_SDA_PIN   21     // I2C SDA (BH1750 + SCD41 ผ่าน breadboard)
+#define I2C_SCL_PIN   22     // I2C SCL (BH1750 + SCD41 ผ่าน breadboard)
 #define SOUND_PIN     34     // KY-037 analog output (ADC1 ใช้ได้ตอน WiFi เปิดด้วย)
 
 // BH1750 ใช้ I2C มาตรฐาน: SDA=21, SCL=22 (ESP32 default)
@@ -64,7 +66,7 @@ DHT dht(DHT_PIN, DHT_TYPE);
 BH1750 lightMeter;
 
 HardwareSerial pmsSerial(2);  // UART2 สำหรับ PMS5003
-SensirionI2CScd4x scd4x;      // SCD41 (CO2) ผ่าน I2C
+SensirionI2cScd4x scd4x;      // SCD41 (CO2) ผ่าน I2C
 
 unsigned long lastSendTime = 0;
 float lastValidPm25 = 0;  // เก็บค่า PM2.5 ล่าสุดที่อ่านได้ถูกต้อง
@@ -84,7 +86,7 @@ void setup() {
   dht.begin();
 
   // BH1750 (I2C)
-  Wire.begin();
+  Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
   if (!lightMeter.begin()) {
     Serial.println("[WARN] BH1750 not found! ตรวจสอบสาย I2C");
   }
@@ -94,7 +96,8 @@ void setup() {
 
   // SCD41 (CO2 via I2C)
   // SCD41 (CO2) ผ่าน I2C
-  scd4x.begin(Wire);
+  scd4x.begin(Wire, SCD41_I2C_ADDR_62);
+  scd4x.wakeUp();
   scd4x.stopPeriodicMeasurement();   // หยุดก่อน (เผื่อค้างจากรอบก่อน)
   scd4x.startPeriodicMeasurement();  // เริ่มวัดต่อเนื่อง (ได้ค่าใหม่ทุก ~5 วิ)
 
@@ -261,7 +264,7 @@ float readCO2() {
   bool isDataReady = false;
 
   // เช็คว่ามีข้อมูลใหม่พร้อมไหม
-  uint16_t error = scd4x.getDataReadyFlag(isDataReady);
+  int16_t error = scd4x.getDataReadyStatus(isDataReady);
   if (error || !isDataReady) {
     return -1;  // ยังไม่มีข้อมูลใหม่ (SCD41 อัปเดตทุก ~5 วิ)
   }
