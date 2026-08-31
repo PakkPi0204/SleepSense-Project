@@ -15,7 +15,7 @@ public class SensorDataRequest {
     @DecimalMin(value = "-10.0") @DecimalMax(value = "60.0")
     private double temperature;
 
-    @DecimalMin(value = "0.0") @DecimalMax(value = "100.0")
+    @DecimalMin(value = "-1.0") @DecimalMax(value = "100.0")
     private double humidity;
 
     @DecimalMin(value = "0.0") @DecimalMax(value = "10000.0")

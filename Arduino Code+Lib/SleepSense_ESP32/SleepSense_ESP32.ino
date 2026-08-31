@@ -149,9 +149,9 @@ void collectAndSendData() {
   float humidity = dht.readHumidity();
 
   if (isnan(temperature) || isnan(humidity)) {
-    Serial.println("[WARN] DHT22 read failed, using fallback values");
-    temperature = 25.0;
-    humidity = 50.0;
+    Serial.println("[WARN] DHT22 read failed, sending -1 (app will show N/A)");
+    temperature = -1;
+    humidity = -1;
   }
 
   // ── BH1750: Light intensity ──

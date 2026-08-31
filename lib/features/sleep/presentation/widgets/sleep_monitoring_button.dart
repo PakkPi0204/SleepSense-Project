@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/network/api_service.dart';
@@ -16,6 +17,40 @@ class SleepMonitoringButton extends StatefulWidget {
 class _SleepMonitoringButtonState extends State<SleepMonitoringButton> {
   bool _monitoringActive = false;
   DateTime? _startedAt;
+
+  static const _kActiveKey = 'monitoring_active';
+  static const _kStartKey = 'monitoring_started_at';
+
+  @override
+  void initState() {
+    super.initState();
+    _restoreState();
+  }
+
+  /// กู้สถานะ monitoring จาก storage (กรณีปิดแอปแล้วเปิดใหม่)
+  Future<void> _restoreState() async {
+    final prefs = await SharedPreferences.getInstance();
+    final active = prefs.getBool(_kActiveKey) ?? false;
+    final startMs = prefs.getInt(_kStartKey);
+    if (active && startMs != null && mounted) {
+      setState(() {
+        _monitoringActive = true;
+        _startedAt = DateTime.fromMillisecondsSinceEpoch(startMs);
+      });
+    }
+  }
+
+  Future<void> _saveState(DateTime startedAt) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kActiveKey, true);
+    await prefs.setInt(_kStartKey, startedAt.millisecondsSinceEpoch);
+  }
+
+  Future<void> _clearState() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_kActiveKey);
+    await prefs.remove(_kStartKey);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -76,6 +111,7 @@ class _SleepMonitoringButtonState extends State<SleepMonitoringButton> {
               _monitoringActive = true;
               _startedAt = DateTime.now();
             });
+            _saveState(_startedAt!);
             _showMonitoringStartedSheet(context);
 
             // TODO: Enable again if we want a lightweight notification.
@@ -111,6 +147,7 @@ class _SleepMonitoringButtonState extends State<SleepMonitoringButton> {
               _monitoringActive = false;
               _startedAt = null;
             });
+            _clearState();
 
             // สร้าง morning report จริงจากช่วงเวลานอน
             final api = ApiService();

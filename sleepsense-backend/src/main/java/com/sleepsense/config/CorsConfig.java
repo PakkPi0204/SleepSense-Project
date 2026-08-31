@@ -17,8 +17,11 @@ public class CorsConfig {
     public CorsFilter corsFilter() {
         CorsConfiguration config = new CorsConfiguration();
         config.addAllowedOriginPattern(allowedOrigins);
-        config.addAllowedHeader("*");
-        config.addAllowedMethod("*");
+        config.addAllowedHeader("*");   // จำเป็นสำหรับ Content-Type ฯลฯ
+        // จำกัดเฉพาะ method ที่ระบบใช้จริง (ปลอดภัยกว่า allow ทั้งหมด)
+        config.addAllowedMethod("GET");
+        config.addAllowedMethod("POST");
+        config.addAllowedMethod("DELETE");
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/**", config);

@@ -26,16 +26,18 @@ class DashboardMapper {
       SensorReading(
         icon: Icons.thermostat_outlined,
         title: 'Temperature',
-        value: '${_fmt(d.temperature)}°C',
-        status: _tempStatus(d.temperature),
-        level: _tempLevel(d.temperature),
+        value: d.temperature < 0 ? 'N/A' : '${_fmt(d.temperature)}°C',
+        status: d.temperature < 0 ? 'No sensor' : _tempStatus(d.temperature),
+        level: d.temperature < 0 ? SensorLevel.normal : _tempLevel(d.temperature),
       ),
       SensorReading(
         icon: Icons.water_drop_outlined,
         title: 'Humidity',
-        value: '${_fmt(d.humidity)}%',
-        status: _rangeStatus(d.humidity, 30, 60),
-        level: _rangeLevel(d.humidity, 30, 60),
+        value: d.humidity < 0 ? 'N/A' : '${_fmt(d.humidity)}%',
+        status: d.humidity < 0 ? 'No sensor' : _rangeStatus(d.humidity, 30, 60),
+        level: d.humidity < 0
+            ? SensorLevel.normal
+            : _rangeLevel(d.humidity, 30, 60),
       ),
       SensorReading(
         icon: Icons.air,
@@ -66,6 +68,13 @@ class DashboardMapper {
         value: '${d.noiseLevel.round()} dB',
         status: _noiseStatus(d.noiseLevel),
         level: _noiseLevel(d.noiseLevel),
+      ),
+      SensorReading(
+        icon: Icons.directions_walk,
+        title: 'Motion',
+        value: d.motionDetected ? 'Detected' : 'None',
+        status: d.motionDetected ? 'Movement' : 'Still',
+        level: SensorLevel.normal,
       ),
     ];
   }
