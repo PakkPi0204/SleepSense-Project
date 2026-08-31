@@ -16,38 +16,75 @@ class DashboardMapper {
         title: 'Temperature',
         value: '${_fmt(d.temperature)}°C',
         status: _tempStatus(d.temperature),
+        level: _tempLevel(d.temperature),
       ),
       SensorReading(
         icon: Icons.water_drop_outlined,
         title: 'Humidity',
         value: '${_fmt(d.humidity)}%',
-        status: _rangeStatus(d.humidity, 40, 60),
+        status: _rangeStatus(d.humidity, 30, 60),
+        level: _rangeLevel(d.humidity, 30, 60),
       ),
       SensorReading(
         icon: Icons.air,
         title: 'CO₂',
         value: d.co2 <= 0 ? 'N/A' : '${d.co2.round()} ppm',
         status: d.co2 <= 0 ? 'No sensor' : _co2Status(d.co2),
+        level: d.co2 <= 0 ? SensorLevel.normal : _co2Level(d.co2),
       ),
       SensorReading(
         icon: Icons.speed_outlined,
         title: 'PM2.5',
         value: '${_fmt(d.pm25)} μg/m³',
         status: _pm25Status(d.pm25),
+        level: _pm25Level(d.pm25),
       ),
       SensorReading(
         icon: Icons.wb_sunny_outlined,
         title: 'Light',
         value: '${d.lightIntensity.round()} lux',
         status: d.lightIntensity <= 50 ? 'Optimal' : 'Bright',
+        level: d.lightIntensity <= 50
+            ? SensorLevel.normal
+            : SensorLevel.warning,
       ),
       SensorReading(
         icon: Icons.volume_up_outlined,
         title: 'Sound',
         value: '${d.noiseLevel.round()} dB',
         status: _noiseStatus(d.noiseLevel),
+        level: _noiseLevel(d.noiseLevel),
       ),
     ];
+  }
+
+  // ── ระดับความรุนแรงตาม threshold (สำหรับเลือกสี) ──
+  static SensorLevel _tempLevel(double t) {
+    if (t < 18 || t > 26) return SensorLevel.warning;
+    return SensorLevel.normal;
+  }
+
+  static SensorLevel _rangeLevel(double v, double min, double max) {
+    if (v < min || v > max) return SensorLevel.warning;
+    return SensorLevel.normal;
+  }
+
+  static SensorLevel _co2Level(double c) {
+    if (c >= 2000) return SensorLevel.critical;
+    if (c >= 1000) return SensorLevel.warning;
+    return SensorLevel.normal;
+  }
+
+  static SensorLevel _pm25Level(double p) {
+    if (p >= 75) return SensorLevel.critical;
+    if (p >= 35) return SensorLevel.warning;
+    return SensorLevel.normal;
+  }
+
+  static SensorLevel _noiseLevel(double n) {
+    if (n >= 60) return SensorLevel.critical;
+    if (n >= 35) return SensorLevel.warning;
+    return SensorLevel.normal;
   }
 
   /// คำนวณ environment score จากค่า sensor (0-100)
@@ -60,7 +97,7 @@ class DashboardMapper {
     if (d.temperature < 18 || d.temperature > 26) score -= 15;
     if (d.pm25 > 35) score -= 15;
     if (d.pm25 > 75) score -= 15;
-    if (d.noiseLevel > 40) score -= 10;
+    if (d.noiseLevel > 35) score -= 10;
     if (d.lightIntensity > 50) score -= 10;
     if (score < 0) score = 0;
 
@@ -130,7 +167,7 @@ class DashboardMapper {
   }
 
   static String _noiseStatus(double n) {
-    if (n < 40) return 'Quiet';
+    if (n < 35) return 'Quiet';
     if (n < 60) return 'Warning';
     return 'Loud';
   }

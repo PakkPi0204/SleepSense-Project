@@ -18,7 +18,7 @@ public class ThresholdConfig {
     private double temperatureMin = 18.0; // °C
     private double temperatureMax = 26.0;
 
-    private double humidityMin = 40.0;    // %
+    private double humidityMin = 30.0;    // %
     private double humidityMax = 60.0;
 
     private double pm25Warning  = 35.0;   // µg/m³
@@ -26,6 +26,6 @@ public class ThresholdConfig {
 
     private double lightMax = 50.0;       // lux (ห้องนอนควรมืด)
 
-    private double noiseWarning  = 40.0;  // dB
+    private double noiseWarning  = 35.0;  // dB
     private double noiseCritical = 60.0;
 }

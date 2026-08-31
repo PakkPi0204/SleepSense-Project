@@ -60,7 +60,7 @@ class SleepMapper {
           d.temperature >= 18 && d.temperature <= 26, 'Optimal', 'Adjust temp'),
       _item(Icons.water_drop_outlined, 'Humidity',
           '${d.humidity.toStringAsFixed(0)} %',
-          d.humidity >= 40 && d.humidity <= 60, 'Optimal', 'Check humidity'),
+          d.humidity >= 30 && d.humidity <= 60, 'Optimal', 'Check humidity'),
       _item(Icons.air, 'CO₂', '${d.co2.round()} ppm',
           d.co2 < 1000, 'Optimal', 'Ventilate'),
       _item(Icons.bolt_outlined, 'PM2.5', '${d.pm25.toStringAsFixed(0)} μg/m³',
@@ -68,7 +68,7 @@ class SleepMapper {
       _item(Icons.wb_sunny_outlined, 'Light', '${d.lightIntensity.round()} lux',
           d.lightIntensity <= 50, 'Optimal', 'Needs dimming'),
       _item(Icons.volume_up_outlined, 'Sound', '${d.noiseLevel.round()} dB',
-          d.noiseLevel < 40, 'Quiet', 'Reduce noise'),
+          d.noiseLevel < 35, 'Quiet', 'Reduce noise'),
     ];
   }
 
@@ -101,7 +101,7 @@ class SleepMapper {
 
   static int _soundScore(double db) {
     if (db < 30) return 100;
-    if (db < 40) return 88;
+    if (db < 35) return 88;
     if (db < 60) return 45;
     return 20;
   }

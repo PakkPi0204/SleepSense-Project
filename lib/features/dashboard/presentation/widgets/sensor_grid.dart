@@ -32,6 +32,20 @@ class SensorCard extends StatelessWidget {
 
   const SensorCard({required this.reading, super.key});
 
+  // สีของสถานะ/ค่า ตามระดับความรุนแรง
+  Color get _statusColor {
+    switch (reading.level) {
+      case SensorLevel.critical:
+        return const Color(0xFFE85D5D); // แดง
+      case SensorLevel.warning:
+        return AppColors.accent;         // ส้ม
+      case SensorLevel.normal:
+        return AppColors.secondary;      // ฟ้าเขียว (ปกติ)
+    }
+  }
+
+  bool get _isAlert => reading.level != SensorLevel.normal;
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -39,7 +53,12 @@ class SensorCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.cardBorder, width: 1.2),
+        border: Border.all(
+          color: _isAlert
+              ? _statusColor.withOpacity(0.6)
+              : AppColors.cardBorder,
+          width: 1.2,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -70,8 +89,8 @@ class SensorCard extends StatelessWidget {
             alignment: Alignment.centerLeft,
             child: Text(
               reading.value,
-              style: const TextStyle(
-                color: AppColors.white,
+              style: TextStyle(
+                color: _isAlert ? _statusColor : AppColors.white,
                 fontSize: 24,
                 fontWeight: FontWeight.w900,
               ),
@@ -80,8 +99,8 @@ class SensorCard extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             reading.status,
-            style: const TextStyle(
-              color: AppColors.secondary,
+            style: TextStyle(
+              color: _statusColor,
               fontSize: 16,
               fontWeight: FontWeight.w700,
             ),

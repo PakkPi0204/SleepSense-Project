@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/network/api_service.dart';
 import '../../models/sleep_models.dart';
 
 class SleepMonitoringButton extends StatefulWidget {
@@ -100,17 +101,27 @@ class _SleepMonitoringButtonState extends State<SleepMonitoringButton> {
         return _ActiveMonitoringSheet(
           startedAt: _startedAt,
           onKeepMonitoring: () => Navigator.of(sheetContext).pop(),
-          onStopMonitoring: () {
-            final duration = DateTime.now().difference(
-              _startedAt ?? DateTime.now(),
-            );
+          onStopMonitoring: () async {
+            final start = _startedAt ?? DateTime.now();
+            final end = DateTime.now();
+            final duration = end.difference(start);
 
             Navigator.of(sheetContext).pop();
             setState(() {
               _monitoringActive = false;
               _startedAt = null;
             });
-            _showMonitoringStoppedSheet(context, duration);
+
+            // สร้าง morning report จริงจากช่วงเวลานอน
+            final api = ApiService();
+            final ok = await api.generateReport(
+              sleepStart: start.millisecondsSinceEpoch,
+              sleepEnd: end.millisecondsSinceEpoch,
+            );
+            api.dispose();
+
+            if (!context.mounted) return;
+            _showMonitoringStoppedSheet(context, duration, ok);
           },
         );
       },
@@ -126,13 +137,17 @@ class _SleepMonitoringButtonState extends State<SleepMonitoringButton> {
     );
   }
 
-  void _showMonitoringStoppedSheet(BuildContext context, Duration duration) {
+  void _showMonitoringStoppedSheet(
+      BuildContext context, Duration duration, bool reportCreated) {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black.withValues(alpha: 0.58),
       isScrollControlled: true,
-      builder: (context) => _MonitoringStoppedSheet(duration: duration),
+      builder: (context) => _MonitoringStoppedSheet(
+        duration: duration,
+        reportCreated: reportCreated,
+      ),
     );
   }
 }
@@ -314,8 +329,12 @@ class _MonitoringStartedSheet extends StatelessWidget {
 
 class _MonitoringStoppedSheet extends StatelessWidget {
   final Duration duration;
+  final bool reportCreated;
 
-  const _MonitoringStoppedSheet({required this.duration});
+  const _MonitoringStoppedSheet({
+    required this.duration,
+    required this.reportCreated,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -368,11 +387,13 @@ class _MonitoringStoppedSheet extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 18),
-                    const Center(
+                    Center(
                       child: Text(
-                        'Morning report preview',
+                        reportCreated
+                            ? 'สร้างรายงานเช้าแล้ว'
+                            : 'หยุดการติดตามแล้ว',
                         textAlign: TextAlign.center,
-                        style: TextStyle(
+                        style: const TextStyle(
                           color: AppColors.white,
                           fontSize: 24,
                           fontWeight: FontWeight.w900,
@@ -380,11 +401,13 @@ class _MonitoringStoppedSheet extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    const Center(
+                    Center(
                       child: Text(
-                        'Your room stayed mostly comfortable overnight.',
+                        reportCreated
+                            ? 'ดูรายงานสภาพแวดล้อมการนอนคืนนี้ได้ที่หน้า Stats'
+                            : 'ไม่สามารถสร้างรายงานได้ (เชื่อมต่อ backend ไม่สำเร็จ)',
                         textAlign: TextAlign.center,
-                        style: TextStyle(
+                        style: const TextStyle(
                           color: AppColors.neutral,
                           fontSize: 16,
                           height: 1.42,
@@ -395,55 +418,17 @@ class _MonitoringStoppedSheet extends StatelessWidget {
                     const SizedBox(height: 22),
                     _ReportMetricRow(
                       icon: Icons.schedule_rounded,
-                      label: 'Duration',
+                      label: 'ระยะเวลาติดตาม',
                       value: _formatDuration(duration),
                     ),
                     const SizedBox(height: 10),
-                    const _ReportMetricRow(
-                      icon: Icons.bed_outlined,
-                      label: 'Room comfort',
-                      value: 'Mostly comfortable',
-                    ),
-                    const SizedBox(height: 10),
-                    const _ReportMetricRow(
-                      icon: Icons.warning_amber_rounded,
-                      label: 'Issue found',
-                      value: 'Light was bright before sleep',
-                      accent: true,
-                    ),
-                    const SizedBox(height: 16),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-                      decoration: BoxDecoration(
-                        color: AppColors.accent.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(
-                          color: AppColors.accent.withValues(alpha: 0.25),
-                        ),
-                      ),
-                      child: const Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Icon(
-                            Icons.lightbulb_outline_rounded,
-                            color: AppColors.accent,
-                            size: 26,
-                          ),
-                          SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              'Try dimming lights earlier tonight to make the room more sleep-ready.',
-                              style: TextStyle(
-                                color: AppColors.neutral,
-                                fontSize: 15,
-                                height: 1.38,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                    _ReportMetricRow(
+                      icon: reportCreated
+                          ? Icons.check_circle_outline_rounded
+                          : Icons.error_outline_rounded,
+                      label: 'สถานะรายงาน',
+                      value: reportCreated ? 'สร้างสำเร็จ' : 'ไม่สำเร็จ',
+                      accent: !reportCreated,
                     ),
                     const SizedBox(height: 24),
                     SizedBox(

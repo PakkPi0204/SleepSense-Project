@@ -14,17 +14,22 @@ class EnvironmentScore {
   });
 }
 
+/// ระดับสถานะของค่า sensor (ใช้เลือกสีตอนแสดงผล)
+enum SensorLevel { normal, warning, critical }
+
 class SensorReading {
   final IconData icon;
   final String title;
   final String value;
   final String status;
+  final SensorLevel level;
 
   const SensorReading({
     required this.icon,
     required this.title,
     required this.value,
     required this.status,
+    this.level = SensorLevel.normal,
   });
 }
 

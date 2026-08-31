@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/network/api_service.dart';
@@ -34,6 +35,9 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
   PreSleepSuggestion _suggestion = samplePreSleepSuggestion;
   MorningReport _report = sampleMorningReport;
   List<AlertDto> _alerts = const [];
+  // เก็บ id ของ critical alert ที่เคยเห็นแล้ว (กันเด้ง banner ซ้ำ)
+  final Set<String> _seenCriticalIds = {};
+  bool _firstLoad = true;
 
   @override
   Timer? _autoRefresh;
@@ -89,6 +93,9 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
         _alerts = alerts;
         _loading = false;
       });
+
+      // เช็ค critical alert ใหม่ แล้วเด้ง banner (ข้ามรอบแรกที่เพิ่งเปิดแอป)
+      _checkNewCriticalAlerts(alerts);
     } catch (e) {
       // ต่อ backend ไม่ได้ → โชว์ sample data ต่อ + แจ้ง error เบาๆ
       setState(() {
@@ -139,6 +146,62 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
         ),
       ),
     );
+  }
+
+  /// ตรวจ critical alert ใหม่ที่ยังไม่เคยเห็น แล้วเด้ง banner
+  void _checkNewCriticalAlerts(List<AlertDto> alerts) {
+    final criticals = alerts.where((a) => a.level == 'CRITICAL').toList();
+
+    // รอบแรก (เพิ่งเปิดแอป) แค่จำ id ไว้ ไม่เด้ง — กันเด้งของเก่าทั้งกอง
+    if (_firstLoad) {
+      for (final a in criticals) {
+        _seenCriticalIds.add(a.id);
+      }
+      _firstLoad = false;
+      return;
+    }
+
+    // หา critical ที่ยังไม่เคยเห็น
+    final newCriticals =
+        criticals.where((a) => !_seenCriticalIds.contains(a.id)).toList();
+
+    if (newCriticals.isNotEmpty && mounted) {
+      for (final a in newCriticals) {
+        _seenCriticalIds.add(a.id);
+      }
+      _showCriticalBanner(newCriticals.first);
+    }
+  }
+
+  /// เด้ง banner แจ้งเตือน critical (ค้าง 6 วิ + กดปิดได้)
+  void _showCriticalBanner(AlertDto alert) {
+    HapticFeedback.heavyImpact(); // สั่นแจ้งเตือน (บนมือถือ)
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearMaterialBanners(); // เคลียร์ banner เก่าก่อน
+    messenger.showMaterialBanner(
+      MaterialBanner(
+        backgroundColor: const Color(0xFF3A1519),
+        leading: const Icon(Icons.warning_amber_rounded,
+            color: Color(0xFFE85D5D), size: 28),
+        content: Text(
+          '⚠️ แจ้งเตือนวิกฤต: ${alert.message}',
+          style: const TextStyle(
+              color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => messenger.hideCurrentMaterialBanner(),
+            child: const Text('ปิด',
+                style: TextStyle(color: Color(0xFFE85D5D))),
+          ),
+        ],
+      ),
+    );
+
+    // ปิดเองอัตโนมัติหลัง 6 วิ
+    Future.delayed(const Duration(seconds: 6), () {
+      if (mounted) messenger.hideCurrentMaterialBanner();
+    });
   }
 
   Widget _alertsSection() {

@@ -64,6 +64,25 @@ class ApiService {
     return const [];
   }
 
+  /// สั่งสร้าง morning report จากช่วงเวลานอน (sleepStart → sleepEnd)
+  Future<bool> generateReport({
+    String? deviceId,
+    required int sleepStart,
+    required int sleepEnd,
+  }) async {
+    final id = deviceId ?? ApiConfig.deviceId;
+    try {
+      final res = await _client
+          .post(Uri.parse(ApiConfig.reportGenerate(id, sleepStart, sleepEnd)))
+          .timeout(timeout);
+      if (res.statusCode != 200) return false;
+      final body = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
+      return body['success'] == true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   /// ลบ morning report ทีละรายการ
   Future<bool> deleteReport(String reportId) async {
     try {
