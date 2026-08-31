@@ -62,6 +62,12 @@ public class MorningReportGenerator {
         // ─── Suggestions ───
         List<String> suggestions = buildSuggestions(avgTemp, avgCo2, avgPm25, avgNoise, motionPattern, cluster);
 
+        // ─── Data completeness ───
+        // ESP32 ส่งทุก 30 วิ = 2 ครั้ง/นาที → คำนวณว่าเก็บได้กี่ % ของที่ควรได้
+        long minutes = java.time.Duration.between(sleepStart, sleepEnd).toMinutes();
+        int expected = (int) Math.max(1, minutes * 2); // อย่างน้อย 1 กันหารศูนย์
+        int completeness = (int) Math.min(100, Math.round(data.size() * 100.0 / expected));
+
         return MorningReport.builder()
                 .deviceId(deviceId)
                 .sleepStart(sleepStart)
@@ -79,6 +85,7 @@ public class MorningReportGenerator {
                 .motionEventCount((int) motionCount)
                 .motionPattern(motionPattern)
                 .environmentCluster(cluster)
+                .dataCompleteness(completeness)
                 .anomalies(anomalies)
                 .suggestions(suggestions)
                 .generatedAt(Instant.now())

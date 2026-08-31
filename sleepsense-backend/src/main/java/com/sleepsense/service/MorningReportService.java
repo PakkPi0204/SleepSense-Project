@@ -120,6 +120,7 @@ public class MorningReportService {
         m.put("motionEventCount",   r.getMotionEventCount());
         m.put("motionPattern",      r.getMotionPattern());
         m.put("environmentCluster", r.getEnvironmentCluster());
+        m.put("dataCompleteness",   r.getDataCompleteness());
         m.put("anomalies",          r.getAnomalies());
         m.put("suggestions",        r.getSuggestions());
         m.put("generatedAt",        r.getGeneratedAt().toEpochMilli());
@@ -145,6 +146,7 @@ public class MorningReportService {
                 .motionEventCount((int) getLong(doc, "motionEventCount"))
                 .motionPattern(doc.getString("motionPattern"))
                 .environmentCluster(doc.getString("environmentCluster"))
+                .dataCompleteness((int) getLong(doc, "dataCompleteness"))
                 .anomalies(getStringList(doc, "anomalies"))
                 .suggestions(getStringList(doc, "suggestions"))
                 .generatedAt(Instant.ofEpochMilli(getLong(doc, "generatedAt")))

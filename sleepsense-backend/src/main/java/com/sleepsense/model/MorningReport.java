@@ -42,6 +42,9 @@ public class MorningReport {
     // Cluster result (จาก Data Clustering)
     private String environmentCluster; // "GOOD" | "MODERATE" | "POOR"
 
+    // ความครบของข้อมูล (%) — เทียบจำนวนที่เก็บได้กับที่ควรได้ (กันกรณีอุปกรณ์ออฟไลน์บางช่วง)
+    private int dataCompleteness;
+
     // Abnormal periods detected
     private List<String> anomalies;
 

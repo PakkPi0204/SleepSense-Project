@@ -96,6 +96,7 @@ class MorningReportDto {
   final int motionEventCount;
   final String motionPattern;        // LOW | MODERATE | HIGH
   final String environmentCluster;   // GOOD | MODERATE | POOR
+  final int dataCompleteness;         // % ความครบของข้อมูล
   final List<String> anomalies;
   final List<String> suggestions;
 
@@ -118,6 +119,7 @@ class MorningReportDto {
     required this.motionEventCount,
     required this.motionPattern,
     required this.environmentCluster,
+    this.dataCompleteness = 100,
     required this.anomalies,
     required this.suggestions,
   });
@@ -142,6 +144,7 @@ class MorningReportDto {
       motionEventCount: (json['motionEventCount'] ?? 0) as int,
       motionPattern: (json['motionPattern'] ?? '') as String,
       environmentCluster: (json['environmentCluster'] ?? '') as String,
+      dataCompleteness: (json['dataCompleteness'] as num?)?.toInt() ?? 100,
       anomalies: _toStringList(json['anomalies']),
       suggestions: _toStringList(json['suggestions']),
     );

@@ -69,6 +69,39 @@ class ReportDetailScreen extends StatelessWidget {
                     ],
                   ),
                 ),
+
+                // ── เตือนถ้าข้อมูลไม่ครบ (อุปกรณ์ออฟไลน์บางช่วง) ──
+                if (report.dataCompleteness < 80) ...[
+                  const SizedBox(height: 14),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: AppColors.accent.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: AppColors.accent.withOpacity(0.4)),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.sensors_off,
+                            color: AppColors.accent, size: 20),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'ข้อมูลครอบคลุม ${report.dataCompleteness}% ของช่วงเวลา — '
+                            'อุปกรณ์อาจออฟไลน์บางช่วง รายงานนี้อาจไม่สะท้อนทั้งคืน',
+                            style: const TextStyle(
+                                color: AppColors.neutral,
+                                fontSize: 13,
+                                height: 1.4),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 28),
 
                 // ── ค่าเฉลี่ย ──
