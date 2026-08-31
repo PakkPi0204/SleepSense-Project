@@ -114,14 +114,14 @@ class _SleepMonitoringButtonState extends State<SleepMonitoringButton> {
 
             // สร้าง morning report จริงจากช่วงเวลานอน
             final api = ApiService();
-            final ok = await api.generateReport(
+            final result = await api.generateReport(
               sleepStart: start.millisecondsSinceEpoch,
               sleepEnd: end.millisecondsSinceEpoch,
             );
             api.dispose();
 
             if (!context.mounted) return;
-            _showMonitoringStoppedSheet(context, duration, ok);
+            _showMonitoringStoppedSheet(context, duration, result);
           },
         );
       },
@@ -138,7 +138,7 @@ class _SleepMonitoringButtonState extends State<SleepMonitoringButton> {
   }
 
   void _showMonitoringStoppedSheet(
-      BuildContext context, Duration duration, bool reportCreated) {
+      BuildContext context, Duration duration, ReportResult result) {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -146,7 +146,7 @@ class _SleepMonitoringButtonState extends State<SleepMonitoringButton> {
       isScrollControlled: true,
       builder: (context) => _MonitoringStoppedSheet(
         duration: duration,
-        reportCreated: reportCreated,
+        result: result,
       ),
     );
   }
@@ -329,11 +329,11 @@ class _MonitoringStartedSheet extends StatelessWidget {
 
 class _MonitoringStoppedSheet extends StatelessWidget {
   final Duration duration;
-  final bool reportCreated;
+  final ReportResult result;
 
   const _MonitoringStoppedSheet({
     required this.duration,
-    required this.reportCreated,
+    required this.result,
   });
 
   @override
@@ -389,9 +389,11 @@ class _MonitoringStoppedSheet extends StatelessWidget {
                     const SizedBox(height: 18),
                     Center(
                       child: Text(
-                        reportCreated
+                        result == ReportResult.success
                             ? 'สร้างรายงานเช้าแล้ว'
-                            : 'หยุดการติดตามแล้ว',
+                            : result == ReportResult.noData
+                                ? 'ไม่มีข้อมูลในช่วงที่ติดตาม'
+                                : 'หยุดการติดตามแล้ว',
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                           color: AppColors.white,
@@ -403,9 +405,11 @@ class _MonitoringStoppedSheet extends StatelessWidget {
                     const SizedBox(height: 10),
                     Center(
                       child: Text(
-                        reportCreated
+                        result == ReportResult.success
                             ? 'ดูรายงานสภาพแวดล้อมการนอนคืนนี้ได้ที่หน้า Stats'
-                            : 'ไม่สามารถสร้างรายงานได้ (เชื่อมต่อ backend ไม่สำเร็จ)',
+                            : result == ReportResult.noData
+                                ? 'ไม่พบข้อมูลเซนเซอร์ในช่วงเวลานี้ — ตรวจสอบว่าอุปกรณ์เปิดและส่งข้อมูลอยู่'
+                                : 'ไม่สามารถสร้างรายงานได้ (เชื่อมต่อ backend ไม่สำเร็จ)',
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                           color: AppColors.neutral,
@@ -423,12 +427,16 @@ class _MonitoringStoppedSheet extends StatelessWidget {
                     ),
                     const SizedBox(height: 10),
                     _ReportMetricRow(
-                      icon: reportCreated
+                      icon: result == ReportResult.success
                           ? Icons.check_circle_outline_rounded
                           : Icons.error_outline_rounded,
                       label: 'สถานะรายงาน',
-                      value: reportCreated ? 'สร้างสำเร็จ' : 'ไม่สำเร็จ',
-                      accent: !reportCreated,
+                      value: result == ReportResult.success
+                          ? 'สร้างสำเร็จ'
+                          : result == ReportResult.noData
+                              ? 'ไม่มีข้อมูล'
+                              : 'ไม่สำเร็จ',
+                      accent: result != ReportResult.success,
                     ),
                     const SizedBox(height: 24),
                     SizedBox(

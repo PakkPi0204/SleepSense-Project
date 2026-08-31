@@ -38,6 +38,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
   // เก็บ id ของ critical alert ที่เคยเห็นแล้ว (กันเด้ง banner ซ้ำ)
   final Set<String> _seenCriticalIds = {};
   bool _firstLoad = true;
+  bool _deviceOffline = false;
 
   @override
   Timer? _autoRefresh;
@@ -85,6 +86,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
         if (sensor != null) {
           _readings = DashboardMapper.toSensorReadings(sensor);
           _score = DashboardMapper.toEnvironmentScore(sensor);
+          _deviceOffline = DashboardMapper.isStale(sensor.timestamp);
         }
         _suggestion = DashboardMapper.toPreSleepSuggestion(suggestions);
         if (report != null) {
@@ -128,6 +130,8 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                     const SizedBox(height: 20),
                     if (_loading) _buildLoading(),
                     if (_error != null && !_loading) _buildErrorBanner(),
+                    if (_error == null && _deviceOffline && !_loading)
+                      _buildOfflineBanner(),
                     const SizedBox(height: 16),
                     EnvironmentScoreCard(score: _score),
                     const SizedBox(height: 28),
@@ -291,6 +295,30 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
       padding: EdgeInsets.symmetric(vertical: 12),
       child: Center(
         child: CircularProgressIndicator(color: AppColors.secondary),
+      ),
+    );
+  }
+
+  Widget _buildOfflineBanner() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.accent),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.sensors_off, color: AppColors.accent, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'อุปกรณ์อาจออฟไลน์ — ไม่ได้รับข้อมูลใหม่เกิน 2 นาที\nค่าที่แสดงอาจไม่ใช่ค่าปัจจุบัน',
+              style: const TextStyle(color: AppColors.neutral, fontSize: 12),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -6,6 +6,18 @@ import '../../features/dashboard/models/dashboard_models.dart';
 /// แปลงข้อมูลจาก backend (DTO) → UI models ที่หน้าจอใช้อยู่แล้ว
 /// รวมตรรกะการ format ค่า + จัดสถานะ (Optimal/Warning ฯลฯ) ไว้ที่เดียว
 class DashboardMapper {
+  /// เช็คว่าข้อมูล sensor เก่าเกินไปไหม (ESP32 อาจหยุดส่ง/ออฟไลน์)
+  /// ESP32 ส่งทุก 30 วิ — ถ้าเกิน 2 นาทีถือว่าน่าจะออฟไลน์
+  static bool isStale(String timestamp) {
+    try {
+      final last = DateTime.parse(timestamp).toLocal();
+      final diff = DateTime.now().difference(last);
+      return diff.inSeconds > 120; // เกิน 2 นาที
+    } catch (_) {
+      return false; // อ่าน timestamp ไม่ได้ ไม่ตัดสินว่า stale
+    }
+  }
+
   DashboardMapper._();
 
   /// SensorDataDto → list ของ SensorReading (6 การ์ด)

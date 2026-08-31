@@ -4,6 +4,13 @@ import 'package:http/http.dart' as http;
 import 'api_config.dart';
 import 'api_models.dart';
 
+/// ผลลัพธ์การสร้าง morning report
+enum ReportResult {
+  success,  // สร้างสำเร็จ มีข้อมูล
+  noData,   // สร้างได้แต่ไม่มีข้อมูล sensor ในช่วงนั้น
+  failed,   // เชื่อม backend ไม่ได้ / error
+}
+
 /// ชั้นเรียก backend API ทั้งหมด
 ///
 /// ทุก endpoint ของ backend ห่อ response ด้วย { success, message, data }
@@ -64,8 +71,8 @@ class ApiService {
     return const [];
   }
 
-  /// สั่งสร้าง morning report จากช่วงเวลานอน (sleepStart → sleepEnd)
-  Future<bool> generateReport({
+  /// ผลลัพธ์การสร้าง report
+  Future<ReportResult> generateReport({
     String? deviceId,
     required int sleepStart,
     required int sleepEnd,
@@ -75,11 +82,17 @@ class ApiService {
       final res = await _client
           .post(Uri.parse(ApiConfig.reportGenerate(id, sleepStart, sleepEnd)))
           .timeout(timeout);
-      if (res.statusCode != 200) return false;
+      if (res.statusCode != 200) return ReportResult.failed;
       final body = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
-      return body['success'] == true;
+      if (body['success'] != true) return ReportResult.failed;
+      // เช็คว่ามีข้อมูล sensor ในช่วงนั้นไหม (cluster UNKNOWN = ไม่มีข้อมูล)
+      final data = body['data'];
+      if (data is Map && data['environmentCluster'] == 'UNKNOWN') {
+        return ReportResult.noData;
+      }
+      return ReportResult.success;
     } catch (e) {
-      return false;
+      return ReportResult.failed;
     }
   }
 
