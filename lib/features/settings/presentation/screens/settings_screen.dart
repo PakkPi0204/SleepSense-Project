@@ -339,10 +339,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         value: _debugAlwaysShowCritical,
         onChanged: (value) {
-          setState(() {
-            _debugAlwaysShowCritical = value;
-            DebugFlags.alwaysShowCriticalOnLoad = value;
-          });
+          setState(() => _debugAlwaysShowCritical = value);
+          // เซ็ตผ่าน setter นี้แทนการเซ็ต field ตรงๆ เพื่อให้ค่าถูกบันทึกลง
+          // SharedPreferences ด้วย ไม่งั้นสวิตช์จะรีเซ็ตกลับ false ทุกครั้งที่
+          // force-kill แอปแล้วเปิดใหม่ (ปัญหาที่ผู้ใช้เจอ)
+          DebugFlags.setAlwaysShowCriticalOnLoad(value);
         },
       ),
     );

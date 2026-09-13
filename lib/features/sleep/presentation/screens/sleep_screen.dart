@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/network/api_config.dart';
 import '../../../../core/network/api_service.dart';
+import '../../../../core/network/api_models.dart';
 import '../../../../core/network/sleep_mapper.dart';
 import '../../data/sleep_sample_data.dart';
 import '../../models/sleep_models.dart';
@@ -50,11 +52,21 @@ class _SleepScreenState extends State<SleepScreen> {
   Future<void> _loadData({bool silent = false}) async {
     if (!silent) setState(() => _loading = true);
     try {
-      final sensor = await _api.fetchLatestSensor();
+      // ดึง threshold ของผู้ใช้มาด้วยเสมอ (เช่นเดียวกับหน้า Home) เพื่อให้หน้า
+      // Sleep ตัดสิน Optimal/Warning ของค่า sensor เดียวกันตรงกับหน้าอื่นๆ ใน
+      // แอป แทนที่จะใช้เกณฑ์ hardcode ของตัวเองแยกต่างหาก — ยิงคู่กันแบบไม่พึ่ง
+      // กัน ถ้า threshold endpoint พังรอบนี้ SleepMapper จะ fallback เป็นค่า
+      // default เอง ไม่ทำให้ sensor reading หายไปด้วย
+      final sensorFuture = _api.fetchLatestSensor();
+      final thresholdsFuture = _safeThresholds();
+
+      final sensor = await sensorFuture;
+      final thresholds = await thresholdsFuture;
+
       setState(() {
         if (sensor != null) {
-          _readiness = SleepMapper.toReadiness(sensor);
-          _checklist = SleepMapper.toChecklist(sensor);
+          _readiness = SleepMapper.toReadiness(sensor, thresholds: thresholds);
+          _checklist = SleepMapper.toChecklist(sensor, thresholds: thresholds);
           _connected = true;
         }
         _loading = false;
@@ -64,6 +76,17 @@ class _SleepScreenState extends State<SleepScreen> {
         _connected = false;
         _loading = false;
       });
+    }
+  }
+
+  /// ห่อ fetchThresholds ไม่ให้ error ของ endpoint นี้ไปบล็อก sensor reading —
+  /// ถ้าพังรอบนี้ ให้ถือว่าไม่มี threshold ที่ผู้ใช้ปรับเอง (SleepMapper จะใช้
+  /// ค่า default แทน) แทนที่จะทำให้ทั้งหน้าล้มเหลวไปด้วย
+  Future<ThresholdSettingsDto?> _safeThresholds() async {
+    try {
+      return await _api.fetchThresholds(deviceId: ApiConfig.deviceId);
+    } catch (_) {
+      return null;
     }
   }
 

@@ -38,10 +38,24 @@ class ApiService {
     return const [];
   }
 
-  /// alert ล่าสุด
+  /// alert ล่าสุด (ประวัติทั้งหมด รวมที่ resolved แล้ว — ใช้กับหน้า Alerts log)
   Future<List<AlertDto>> fetchRecentAlerts({String? deviceId, int limit = 20}) async {
     final id = deviceId ?? ApiConfig.deviceId;
     final data = await _getData(ApiConfig.alertsRecent(id, limit: limit));
+    if (data is List) {
+      return data
+          .map((e) => AlertDto.fromJson(e as Map<String, dynamic>))
+          .toList();
+    }
+    return const [];
+  }
+
+  /// alert ที่ยัง active อยู่จริง (ยังไม่ resolved) — ใช้กับ badge หน้า Home
+  /// และตัดสินว่าจะบังคับเด้ง critical popup ไหม แทน fetchRecentAlerts ซึ่งเป็น
+  /// ประวัติล้วนๆ รวมของเก่าที่ปัญหาหายไปแล้วด้วย
+  Future<List<AlertDto>> fetchActiveAlerts({String? deviceId}) async {
+    final id = deviceId ?? ApiConfig.deviceId;
+    final data = await _getData(ApiConfig.alertsActive(id));
     if (data is List) {
       return data
           .map((e) => AlertDto.fromJson(e as Map<String, dynamic>))

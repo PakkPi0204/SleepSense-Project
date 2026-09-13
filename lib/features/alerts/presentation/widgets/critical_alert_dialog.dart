@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/network/api_models.dart';
+import '../../../../core/storage/suggestion_ack_store.dart';
 
-/// เนื้อหาเฉพาะของแต่ละ factor (ไอคอน, ชื่อที่แสดง, หน่วย, คำแนะนำ)
+/// เนื้อหาเฉพาะของแต่ละ factor (ไอคอน, ชื่อที่แสดง, หน่วย, คำแนะนำ, ปุ่ม action)
 /// ใช้ทั้งใน dialog นี้และที่อื่นได้ถ้าต้องการ
 class _FactorInfo {
   final IconData icon;
@@ -11,6 +12,7 @@ class _FactorInfo {
   final String unit;
   final String verb; // เช่น "is critically high"
   final String suggestion;
+  final String actionLabel; // ข้อความปุ่ม action สั้นๆ เช่น "Turn on fan/AC"
 
   const _FactorInfo({
     required this.icon,
@@ -18,6 +20,7 @@ class _FactorInfo {
     required this.unit,
     required this.verb,
     required this.suggestion,
+    required this.actionLabel,
   });
 }
 
@@ -28,6 +31,7 @@ const Map<String, _FactorInfo> _factorInfo = {
     unit: 'ppm',
     verb: 'is critically high',
     suggestion: 'Open a window or improve ventilation immediately.',
+    actionLabel: "I've opened the window",
   ),
   'TEMPERATURE': _FactorInfo(
     icon: Icons.thermostat_outlined,
@@ -35,6 +39,7 @@ const Map<String, _FactorInfo> _factorInfo = {
     unit: '°C',
     verb: 'is out of a safe range',
     suggestion: 'Adjust your thermostat, fan, or AC to a comfortable range.',
+    actionLabel: "I've turned on the fan/AC",
   ),
   'HUMIDITY': _FactorInfo(
     icon: Icons.water_drop_outlined,
@@ -43,6 +48,7 @@ const Map<String, _FactorInfo> _factorInfo = {
     verb: 'is out of a safe range',
     suggestion:
         'Use a dehumidifier or humidifier to balance moisture levels.',
+    actionLabel: "I've adjusted the humidity",
   ),
   'PM25': _FactorInfo(
     icon: Icons.speed_outlined,
@@ -50,6 +56,7 @@ const Map<String, _FactorInfo> _factorInfo = {
     unit: 'μg/m³',
     verb: 'is critically high',
     suggestion: 'Turn on an air purifier and keep windows closed.',
+    actionLabel: "I've turned on the air purifier",
   ),
   'NOISE': _FactorInfo(
     icon: Icons.volume_up_outlined,
@@ -57,6 +64,7 @@ const Map<String, _FactorInfo> _factorInfo = {
     unit: 'dB',
     verb: 'is critically loud',
     suggestion: 'Reduce noise sources or consider earplugs before sleeping.',
+    actionLabel: "I've handled the noise",
   ),
   'LIGHT': _FactorInfo(
     icon: Icons.wb_sunny_outlined,
@@ -64,6 +72,7 @@ const Map<String, _FactorInfo> _factorInfo = {
     unit: 'lux',
     verb: 'is critically bright',
     suggestion: 'Dim or turn off lights for better sleep quality.',
+    actionLabel: "I've dimmed the lights",
   ),
 };
 
@@ -75,6 +84,7 @@ _FactorInfo _infoFor(String factor) =>
       unit: '',
       verb: 'needs immediate attention',
       suggestion: 'Check this room condition as soon as possible.',
+      actionLabel: "I've handled it",
     );
 
 /// Popup แจ้งเตือน critical alert แบบเต็มจอ (modal)
@@ -91,7 +101,7 @@ class CriticalAlertDialog extends StatelessWidget {
 
   static const _critical = Color(0xFFE85D5D);
 
-  /// แสดง dialog — กันปิดโดยการแตะข้างนอก (ต้องกด "Got it" หรือ "View Room Status")
+  /// แสดง dialog — กันปิดโดยการแตะข้างนอก (ต้องกดปุ่มใดปุ่มหนึ่งด้านล่างเท่านั้น)
   static Future<void> show(
     BuildContext context,
     AlertDto alert, {
@@ -257,11 +267,19 @@ class CriticalAlertDialog extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 20),
+              // ปุ่มหลัก: กดเพื่อ "รับทราบว่าจัดการแล้ว" — สถานะนี้ถูกบันทึกลง
+              // local storage ผูกกับ factor นี้ (ไม่ใช่ id ของ alert ที่เปลี่ยน
+              // ทุกรอบ) ดังนั้นแม้ผู้ใช้จะปิดแอปแล้วเปิดใหม่ ระบบจะไม่บังคับเด้ง
+              // popup นี้ซ้ำอีก จนกว่าปัญหานี้จะหายไปแล้วเกิดขึ้นใหม่อีกรอบ
               SizedBox(
                 width: double.infinity,
                 height: 48,
                 child: ElevatedButton(
-                  onPressed: () => Navigator.of(context).pop(),
+                  onPressed: () async {
+                    await SuggestionAckStore.instance
+                        .acknowledge('CRITICAL_${alert.factor.toUpperCase()}');
+                    if (context.mounted) Navigator.of(context).pop();
+                  },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.accent,
                     foregroundColor: AppColors.primary,
@@ -270,28 +288,43 @@ class CriticalAlertDialog extends StatelessWidget {
                       borderRadius: BorderRadius.circular(14),
                     ),
                   ),
-                  child: const Text(
-                    'Got it',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                  child: Text(
+                    info.actionLabel,
+                    style: const TextStyle(
+                        fontSize: 15, fontWeight: FontWeight.w700),
                   ),
                 ),
               ),
               const SizedBox(height: 6),
-              Center(
-                child: TextButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    onViewRoomStatus?.call();
-                  },
-                  child: const Text(
-                    'View Room Status',
-                    style: TextStyle(
-                      color: AppColors.neutral,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text(
+                      'Remind me later',
+                      style: TextStyle(
+                        color: AppColors.neutral,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
-                ),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      onViewRoomStatus?.call();
+                    },
+                    child: const Text(
+                      'View Room Status',
+                      style: TextStyle(
+                        color: AppColors.neutral,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

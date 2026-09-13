@@ -39,6 +39,8 @@ class ApiConfig {
   static String preSleep(String id) => '$baseUrl/api/sensor/presleep?deviceId=$id';
   static String alertsRecent(String id, {int limit = 20}) =>
       '$baseUrl/api/alerts/recent?deviceId=$id&limit=$limit';
+  static String alertsActive(String id) =>
+      '$baseUrl/api/alerts/active?deviceId=$id';
   static String reportLatest(String id) => '$baseUrl/api/report/latest?deviceId=$id';
   static String reportHistory(String id, {int limit = 30}) =>
       '$baseUrl/api/report/history?deviceId=$id&limit=$limit';

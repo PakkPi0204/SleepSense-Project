@@ -211,15 +211,107 @@ class DashboardMapper {
     );
   }
 
-  /// list ข้อความ → PreSleepSuggestion (โชว์อันแรก)
+  /// list ข้อความ (จาก backend) → PreSleepSuggestion แบบ "Smart Suggestion"
+  /// โชว์อันแรกที่ backend ส่งมา แต่แปลงเป็นคำแนะนำเชิง action ที่กดจัดการได้เลย
+  /// พร้อมแนบ [factorKey] คงที่ไว้ผูกกับสถานะปุ่ม "เปิดแล้ว" ใน local storage
   static PreSleepSuggestion toPreSleepSuggestion(List<String> suggestions) {
-    final msg = suggestions.isNotEmpty
-        ? suggestions.first
-        : 'สภาพแวดล้อมห้องนอนเหมาะสมสำหรับการนอนหลับ';
+    if (suggestions.isEmpty) {
+      return const PreSleepSuggestion(
+        icon: Icons.check_circle_outline,
+        title: 'Smart Suggestion',
+        message:
+            'สภาพแวดล้อมห้องนอนของคุณพร้อมสำหรับการนอนหลับแล้ว ✓ ไม่มีจุดที่ต้องปรับตอนนี้',
+        factorKey: 'OK',
+      );
+    }
+
+    final raw = suggestions.first;
+    final rule = _matchSuggestionRule(raw);
     return PreSleepSuggestion(
+      icon: rule.icon,
+      title: 'Smart Suggestion',
+      message: rule.buildMessage(raw),
+      factorKey: rule.factorKey,
+      actionLabel: rule.actionLabel,
+      isWarning: true,
+    );
+  }
+
+  /// จับคำสำคัญในข้อความที่ backend ส่งมา (ภาษาไทย) เพื่อแมปเป็น factor ที่คงที่
+  /// + คำแนะนำเชิง action — ใช้การจับคำแทนการเทียบข้อความแบบเป๊ะ เพราะตัวเลข
+  /// (องศา/ppm/%) ในข้อความจะเปลี่ยนไปทุกครั้งที่ sensor อัปเดตค่าใหม่
+  static _SuggestionRule _matchSuggestionRule(String msg) {
+    if (msg.contains('CO₂') || msg.contains('CO2')) {
+      return _SuggestionRule(
+        factorKey: 'CO2_HIGH',
+        icon: Icons.air,
+        actionLabel: 'เปิดหน้าต่างระบายอากาศ',
+        intro: 'อากาศในห้องเริ่มอับ ระบายอากาศก่อนเข้านอนจะช่วยให้หลับสบายขึ้น',
+      );
+    }
+    if (msg.contains('อุณหภูมิสูง')) {
+      return _SuggestionRule(
+        factorKey: 'TEMP_HIGH',
+        icon: Icons.thermostat_outlined,
+        actionLabel: 'เปิดพัดลม/แอร์',
+        intro: 'ห้องร้อนเกินช่วงที่เหมาะกับการนอน ลดอุณหภูมิลงก่อนเข้านอนดีกว่า',
+      );
+    }
+    if (msg.contains('อุณหภูมิต่ำ')) {
+      return _SuggestionRule(
+        factorKey: 'TEMP_LOW',
+        icon: Icons.thermostat_outlined,
+        actionLabel: 'เพิ่มความอบอุ่นในห้อง',
+        intro: 'ห้องเย็นเกินไป เพิ่มความอบอุ่นสักหน่อยจะนอนหลับได้เต็มอิ่มกว่า',
+      );
+    }
+    if (msg.contains('ความชื้นสูง')) {
+      return _SuggestionRule(
+        factorKey: 'HUMIDITY_HIGH',
+        icon: Icons.water_drop_outlined,
+        actionLabel: 'เปิดเครื่องลดความชื้น',
+        intro: 'ความชื้นสูงเกินไป เสี่ยงอับชื้นและนอนไม่สบายตัว',
+      );
+    }
+    if (msg.contains('ความชื้นต่ำ')) {
+      return _SuggestionRule(
+        factorKey: 'HUMIDITY_LOW',
+        icon: Icons.water_drop_outlined,
+        actionLabel: 'เปิดเครื่องเพิ่มความชื้น',
+        intro: 'อากาศแห้งเกินไป อาจทำให้ระคายคอระหว่างนอน',
+      );
+    }
+    if (msg.contains('PM2.5') || msg.contains('ฝุ่น')) {
+      return _SuggestionRule(
+        factorKey: 'PM25_HIGH',
+        icon: Icons.speed_outlined,
+        actionLabel: 'เปิดเครื่องฟอกอากาศ',
+        intro: 'ฝุ่น PM2.5 สูงเกินค่าที่ปลอดภัย ควรฟอกอากาศก่อนนอน',
+      );
+    }
+    if (msg.contains('แสงสว่าง')) {
+      return _SuggestionRule(
+        factorKey: 'LIGHT_HIGH',
+        icon: Icons.wb_sunny_outlined,
+        actionLabel: 'ปิดไฟ/ปิดม่าน',
+        intro: 'ห้องยังสว่างเกินไปสำหรับการนอนหลับที่มีคุณภาพ',
+      );
+    }
+    if (msg.contains('เสียง')) {
+      return _SuggestionRule(
+        factorKey: 'NOISE_HIGH',
+        icon: Icons.volume_up_outlined,
+        actionLabel: 'ลดเสียงรบกวน',
+        intro: 'มีเสียงรบกวนเกินระดับที่เหมาะกับการนอน',
+      );
+    }
+    // ไม่เข้าเงื่อนไขที่รู้จัก — ใช้ข้อความเดิมจาก backend ตรงๆ แต่ยังให้กด
+    // "รับทราบ" ได้เพื่อคงพฤติกรรม smart-suggestion แบบเดียวกัน
+    return _SuggestionRule(
+      factorKey: 'OTHER',
       icon: Icons.light_mode_outlined,
-      title: 'Pre-Sleep Suggestion',
-      message: msg,
+      actionLabel: 'รับทราบ',
+      intro: null,
     );
   }
 
@@ -274,5 +366,116 @@ class DashboardMapper {
     if (n < warning) return 'Quiet';
     if (n < critical) return 'Warning';
     return 'Loud';
+  }
+
+  /// เช็คว่า factor นี้ (จาก AlertDto.factor เช่น "TEMPERATURE", "CO2") ยัง
+  /// วิกฤตอยู่จริงหรือไม่ เทียบกับค่า sensor + threshold "ปัจจุบัน" — ไม่ใช่ค่า
+  /// value/threshold ที่บันทึกแช่แข็งไว้ตอนสร้าง alert แถวนั้น
+  ///
+  /// backend เก็บ alert เป็น log ประวัติศาสตร์ล้วนๆ (ไม่มีสถานะ
+  /// resolved/active — ดู AlertRepository.findRecentByDevice) ดังนั้นถ้าผู้ใช้
+  /// เพิ่งปรับ threshold ใหม่ให้กว้างขึ้น alert แถวเก่าที่เคยวิกฤตภายใต้
+  /// threshold เดิมก็จะยังถูกส่งกลับมาใน "recent alerts" อยู่ดี ทั้งที่ค่า
+  /// ปัจจุบันไม่วิกฤตแล้วภายใต้ threshold ใหม่ — ฟังก์ชันนี้ใช้กรองแถวแบบนั้น
+  /// ออกก่อนจะบังคับเด้ง popup ซ้ำ
+  static bool isFactorCritical(
+    String factor,
+    SensorDataDto d, {
+    ThresholdSettingsDto? thresholds,
+  }) {
+    final tempCriticalMin = thresholds?.temperatureCriticalMin ?? 15;
+    final tempCriticalMax = thresholds?.temperatureCriticalMax ?? 32;
+    final humidityCriticalMin = thresholds?.humidityCriticalMin ?? 20;
+    final humidityCriticalMax = thresholds?.humidityCriticalMax ?? 70;
+    final co2Critical = thresholds?.co2Critical ?? 2000;
+    final pm25Critical = thresholds?.pm25Critical ?? 75;
+    final lightCritical = thresholds?.lightCritical ?? 200;
+    final noiseCritical = thresholds?.noiseCritical ?? 60;
+
+    switch (factor.toUpperCase()) {
+      case 'TEMPERATURE':
+        return d.temperature < tempCriticalMin ||
+            d.temperature > tempCriticalMax;
+      case 'HUMIDITY':
+        return d.humidity > 0 &&
+            (d.humidity < humidityCriticalMin ||
+                d.humidity > humidityCriticalMax);
+      case 'CO2':
+        return d.co2 >= co2Critical;
+      case 'PM25':
+        return d.pm25 >= pm25Critical;
+      case 'LIGHT':
+        return d.lightIntensity >= lightCritical;
+      case 'NOISE':
+        return d.noiseLevel >= noiseCritical;
+      default:
+        // factor ที่ไม่รู้จัก — ไม่มีข้อมูลพอจะเช็คซ้ำ เชื่อ backend ไปก่อน
+        return true;
+    }
+  }
+
+  /// เหมือน [isFactorCritical] แต่รองรับ WARNING ด้วย — ใช้เฉพาะตอน fallback
+  /// (backend เก่ายังไม่มี endpoint /active) ตอนกรอง /recent ฝั่ง client เอง
+  /// factor ระดับ CRITICAL เช็คกับ critical bound, ระดับ WARNING เช็คกับ
+  /// warning bound (เกณฑ์เดียวกับ toSensorReadings)
+  static bool isFactorStillFlagged(
+    String factor,
+    String level,
+    SensorDataDto d, {
+    ThresholdSettingsDto? thresholds,
+  }) {
+    if (level.toUpperCase() == 'CRITICAL') {
+      return isFactorCritical(factor, d, thresholds: thresholds);
+    }
+
+    final tempMin = thresholds?.temperatureMin ?? 18;
+    final tempMax = thresholds?.temperatureMax ?? 26;
+    final humidityMin = thresholds?.humidityMin ?? 30;
+    final humidityMax = thresholds?.humidityMax ?? 60;
+    final co2Warning = thresholds?.co2Warning ?? 1000;
+    final pm25Warning = thresholds?.pm25Warning ?? 35;
+    final lightWarning = thresholds?.lightMax ?? 50;
+    final noiseWarning = thresholds?.noiseWarning ?? 40;
+
+    switch (factor.toUpperCase()) {
+      case 'TEMPERATURE':
+        return d.temperature < tempMin || d.temperature > tempMax;
+      case 'HUMIDITY':
+        return d.humidity > 0 &&
+            (d.humidity < humidityMin || d.humidity > humidityMax);
+      case 'CO2':
+        return d.co2 >= co2Warning;
+      case 'PM25':
+        return d.pm25 >= pm25Warning;
+      case 'LIGHT':
+        return d.lightIntensity >= lightWarning;
+      case 'NOISE':
+        return d.noiseLevel >= noiseWarning;
+      default:
+        return true;
+    }
+  }
+}
+
+/// กติกาแปลงข้อความ suggestion ดิบจาก backend → smart suggestion 1 factor
+/// (ไอคอน, factor key คงที่, action label, ประโยคแนะนำแบบอ่านง่าย)
+class _SuggestionRule {
+  final String factorKey;
+  final IconData icon;
+  final String actionLabel;
+  final String? intro;
+
+  const _SuggestionRule({
+    required this.factorKey,
+    required this.icon,
+    required this.actionLabel,
+    required this.intro,
+  });
+
+  /// ประกอบข้อความสุดท้าย: ประโยคแนะนำแบบอ่านง่าย (ถ้ามี) + ค่าที่วัดได้จริงจาก
+  /// backend ต่อท้าย เพื่อให้เห็นทั้ง "ทำไมต้องทำ" และ "ตัวเลขจริงตอนนี้"
+  String buildMessage(String raw) {
+    if (intro == null) return raw;
+    return '$intro\n$raw';
   }
 }

@@ -9,6 +9,8 @@ import '../../../../core/network/api_service.dart';
 import '../../../../core/network/api_models.dart';
 import '../../../../core/network/dashboard_mapper.dart';
 import '../../../../core/debug/debug_flags.dart';
+import '../../../../core/storage/suggestion_ack_store.dart';
+import '../../../../core/events/dashboard_refresh_bus.dart';
 import '../../../alerts/presentation/screens/alerts_screen.dart';
 import '../../../alerts/presentation/widgets/critical_alert_dialog.dart';
 import '../../data/dashboard_sample_data.dart';
@@ -40,9 +42,11 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
   PreSleepSuggestion _suggestion = samplePreSleepSuggestion;
   MorningReport _report = sampleMorningReport;
   List<AlertDto> _alerts = const [];
-  // เก็บ id ของ critical alert ที่เคยเห็นแล้ว (กันเด้ง banner ซ้ำ)
-  final Set<String> _seenCriticalIds = {};
-  bool _firstLoad = true;
+  // เก็บ "factor" ของ critical alert ที่เด้ง popup ให้ดูแล้วใน session นี้ —
+  // กันไม่ให้เด้งซ้ำทุก 30 วิระหว่างที่ยังเปิดแอปอยู่ (ไม่ persist ข้าม session
+  // โดยตั้งใจ: สถานะที่ "persist ข้ามการปิด-เปิดแอป" จริงๆ คือสถานะ acknowledge
+  // ใน SuggestionAckStore ที่ผูกกับปุ่มใน dialog แทน)
+  final Set<String> _shownThisSessionFactors = {};
   bool _deviceOffline = false;
 
   Timer? _autoRefresh;
@@ -60,12 +64,23 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
       const Duration(seconds: 30),
       (_) => _loadData(silent: true),
     );
+    // ฟัง signal จากหน้าอื่น (เช่น กด Stop Monitoring ที่หน้า Sleep แล้วสร้าง
+    // morning report ใหม่สำเร็จ) เพื่อโหลดข้อมูลใหม่ทันที ไม่ต้องรอ
+    // auto-refresh รอบถัดไป (นานสุด 30 วิ) — จำเป็นเพราะ IndexedStack ทำให้
+    // หน้านี้ไม่ถูก dispose/initState ใหม่ตอนสลับแท็บ
+    DashboardRefreshBus.instance.listenable.addListener(_onExternalDataChanged);
+  }
+
+  void _onExternalDataChanged() {
+    _loadData(silent: true);
   }
 
   @override
   void dispose() {
     _pulseController.dispose();
     _autoRefresh?.cancel();
+    DashboardRefreshBus.instance.listenable
+        .removeListener(_onExternalDataChanged);
     _api.dispose();
     super.dispose();
   }
@@ -86,12 +101,26 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
     // แยกยิงเพื่อให้ endpoint ที่สำเร็จอัปเดตผลได้เสมอ ไม่ขึ้นกับ endpoint อื่น
     // เริ่มยิงทั้ง 5 ตัวพร้อมกัน (ไม่ await ทีละตัว ไม่งั้นจะกลายเป็นยิงเรียง
     // ต่อกันทีละ endpoint ช้าลง 5 เท่า) แล้วค่อย await ผลลัพธ์แต่ละตัวทีหลัง
-    final sensorFuture = _safeCall(() => _api.fetchLatestSensor());
-    final thresholdsFuture =
-        _safeCall(() => _api.fetchThresholds(deviceId: ApiConfig.deviceId));
+    // เก็บ future ดิบของ sensor/thresholds ไว้แยกจาก _safeCall เพื่อส่งต่อให้
+    // _fetchAlertsForHome ใช้ตอน fallback (ดูคอมเมนต์ด้านล่าง) — เรียก .then/
+    // await future ตัวเดิมซ้ำได้โดยไม่ยิง request ซ้ำ
+    final rawSensorFuture = _api.fetchLatestSensor();
+    final rawThresholdsFuture =
+        _api.fetchThresholds(deviceId: ApiConfig.deviceId);
+
+    final sensorFuture = _safeCall(() => rawSensorFuture);
+    final thresholdsFuture = _safeCall(() => rawThresholdsFuture);
     final suggestionsFuture = _safeCall(() => _api.fetchPreSleepSuggestions());
     final reportFuture = _safeCall(() => _api.fetchLatestReport());
-    final alertsFuture = _safeCall(() => _api.fetchRecentAlerts(limit: 5));
+    // ใช้ /active แทน /recent สำหรับ badge หน้า Home + critical popup — คืน
+    // เฉพาะ alert ที่ backend เห็นว่ายัง active อยู่จริง (ยังไม่ resolved) ไม่ใช่
+    // ประวัติทั้งหมดที่รวมของเก่าที่ปัญหาหายไปแล้วด้วย ถ้า backend ยังเป็น
+    // เวอร์ชันเก่าที่ยังไม่มี endpoint นี้ (ยังไม่ได้ deploy) จะ 404/error แล้ว
+    // _fetchAlertsForHome จะ fallback ไปใช้ /recent + กรองเองฝั่ง client แทน
+    // โดยอัตโนมัติ ไม่ต้องรอ deploy backend ก็ demo ได้ตามปกติ พอ deploy เสร็จ
+    // เมื่อไหร่ก็จะสลับไปใช้ /active ที่แม่นกว่าเองทันทีโดยไม่ต้องแก้โค้ด
+    final alertsFuture = _safeCall(
+        () => _fetchAlertsForHome(rawSensorFuture, rawThresholdsFuture));
 
     final sensorResult = await sensorFuture;
     final thresholdsResult = await thresholdsFuture;
@@ -106,6 +135,10 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
         suggestionsResult.error != null &&
         reportResult.error != null &&
         alertsResult.error != null;
+
+    // จำ factor ของ suggestion เดิมไว้ก่อน setState ทับค่า — ใช้เช็คว่า
+    // สภาพแวดล้อมเพิ่ง "กลับมาปกติ" รอบนี้หรือเปล่า (จากมีปัญหา -> OK)
+    final previousSuggestionFactor = _suggestion.factorKey;
 
     setState(() {
       final sensor = sensorResult.value;
@@ -135,9 +168,23 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
       _loading = false;
     });
 
-    // เช็ค critical alert ใหม่ แล้วเด้ง popup (ข้ามรอบแรกที่เพิ่งเปิดแอป)
+    // สภาพแวดล้อมเพิ่งกลับมาปกติรอบนี้ (จากมีปัญหา -> OK) — เคลียร์สถานะ
+    // "จัดการแล้ว" ที่เคยบันทึกไว้ทั้งหมด เพื่อให้รอบหน้าที่ปัญหาเดิมเกิดซ้ำ
+    // ปุ่ม/popup จะกลับมาเตือนใหม่ตามปกติ แทนที่จะค้างสถานะ "เปิดแล้ว" ไปตลอด
+    if (previousSuggestionFactor != 'OK' && _suggestion.factorKey == 'OK') {
+      SuggestionAckStore.instance.clearAll();
+    }
+
+    // เช็ค critical alert ที่ยังไม่เคยถูก "รับทราบว่าจัดการแล้ว" แล้วบังคับเด้ง
+    // popup ให้ทุกครั้ง (รวมถึงตอนเพิ่งเปิดแอปใหม่ด้วย) — จะไม่เด้งซ้ำก็ต่อเมื่อ
+    // ผู้ใช้เคยกดปุ่ม action ใน dialog มาก่อนแล้วเท่านั้น (persist ข้ามการปิด-
+    // เปิดแอป ผ่าน SuggestionAckStore) ไม่ใช่แค่เคยเห็นแอปแล้วรอบหนึ่ง
     if (alertsResult.value != null) {
-      _checkNewCriticalAlerts(alertsResult.value!);
+      await _checkCriticalAlerts(
+        alertsResult.value!,
+        sensor: sensorResult.value,
+        thresholds: thresholdsResult.value,
+      );
     }
   }
 
@@ -147,6 +194,58 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
       return _Result<T>(value: await call());
     } catch (e) {
       return _Result<T>(error: e.toString());
+    }
+  }
+
+  /// ดึง alert สำหรับหน้า Home — ลอง endpoint /active (backend เวอร์ชันใหม่)
+  /// ก่อน ถ้าพัง (404/error เพราะ backend ยังเป็นเวอร์ชันเก่าที่ยังไม่ได้
+  /// deploy โค้ด resolved) จะ fallback ไปดึง /recent (ประวัติทั้งหมด) มาแทน
+  /// แล้วกรองเองฝั่ง client: เอาแค่แถวล่าสุดของแต่ละ factor (recent เรียงใหม่
+  /// สุดก่อนอยู่แล้ว) แล้วเช็คว่ายังจริงอยู่ไหมกับ sensor/threshold ปัจจุบัน —
+  /// ให้ demo/ใช้งานได้ตามปกติแม้ backend ยังไม่ได้ redeploy
+  Future<List<AlertDto>> _fetchAlertsForHome(
+    Future<SensorDataDto?> sensorFuture,
+    Future<ThresholdSettingsDto> thresholdsFuture,
+  ) async {
+    try {
+      return await _api.fetchActiveAlerts();
+    } catch (_) {
+      List<AlertDto> recent;
+      try {
+        recent = await _api.fetchRecentAlerts(limit: 20);
+      } catch (_) {
+        return const [];
+      }
+
+      SensorDataDto? sensor;
+      ThresholdSettingsDto? thresholds;
+      try {
+        sensor = await sensorFuture;
+      } catch (_) {
+        sensor = null;
+      }
+      try {
+        thresholds = await thresholdsFuture;
+      } catch (_) {
+        thresholds = null;
+      }
+
+      final seenFactors = <String>{};
+      final result = <AlertDto>[];
+      for (final a in recent) {
+        final key = a.factor.toUpperCase();
+        if (seenFactors.contains(key)) {
+          continue; // เอาแค่แถวล่าสุดของแต่ละ factor
+        }
+        seenFactors.add(key);
+        if (sensor != null &&
+            !DashboardMapper.isFactorStillFlagged(a.factor, a.level, sensor,
+                thresholds: thresholds)) {
+          continue;
+        }
+        result.add(a);
+      }
+      return result;
     }
   }
 
@@ -195,39 +294,57 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
     );
   }
 
-  /// ตรวจ critical alert ใหม่ที่ยังไม่เคยเห็น แล้วเด้ง popup
-  void _checkNewCriticalAlerts(List<AlertDto> alerts) {
+  /// ตรวจ critical alert ทุกตัวที่ยังไม่ถูก "รับทราบว่าจัดการแล้ว" (ผูกกับ
+  /// factor เดิม ไม่ใช่ alert.id ที่เปลี่ยนใหม่ทุกรอบ sensor อัปเดต) แล้วบังคับ
+  /// เด้ง popup — ทำงานทุกครั้งที่โหลดข้อมูล รวมถึงตอนเพิ่งเปิดแอปใหม่ด้วย
+  ///
+  /// [sensor]/[thresholds] คือค่า "ปัจจุบัน" ของรอบโหลดนี้ — ใช้เช็คซ้ำว่า
+  /// alert แต่ละแถวยังวิกฤตอยู่จริงไหมก่อนบังคับเด้ง เพราะ backend เก็บ alert
+  /// เป็น log ประวัติศาสตร์ล้วนๆ ไม่มีสถานะ resolved/active (ดู
+  /// AlertRepository.findRecentByDevice ฝั่ง backend) ถ้าผู้ใช้เพิ่งปรับ
+  /// threshold ให้กว้างขึ้น แถวเก่าที่เคยวิกฤตภายใต้ threshold เดิมก็จะยังโผล่
+  /// มาใน "recent alerts" อยู่ดี ทั้งที่ค่าปัจจุบันไม่วิกฤตแล้ว
+  Future<void> _checkCriticalAlerts(
+    List<AlertDto> alerts, {
+    required SensorDataDto? sensor,
+    required ThresholdSettingsDto? thresholds,
+  }) async {
     final criticals = alerts.where((a) => a.level == 'CRITICAL').toList();
+    if (criticals.isEmpty) return;
 
-    // รอบแรก (เพิ่งเปิดแอป): ปกติแค่จำ id ไว้ ไม่เด้ง — กันเด้งของเก่าทั้งกอง
-    // ยกเว้นเปิดโหมดทดสอบไว้ (DebugFlags.alwaysShowCriticalOnLoad) จะเด้งให้ทุกตัวเลย
-    if (_firstLoad) {
-      _firstLoad = false;
-      for (final a in criticals) {
-        _seenCriticalIds.add(a.id);
+    final toShow = <AlertDto>[];
+    for (final a in criticals) {
+      // ถ้ามีค่า sensor ของรอบนี้ ให้เช็คซ้ำกับ threshold ปัจจุบันก่อน — ถ้า
+      // ไม่วิกฤตแล้ว (เช่น ผู้ใช้เพิ่งปรับ threshold ให้กว้างขึ้น) ข้ามแถวนี้ไป
+      // เลย ไม่ต้องบังคับเด้ง popup ของปัญหาที่ไม่ใช่ปัญหาอีกต่อไป ถ้าไม่มีค่า
+      // sensor รอบนี้ (endpoint พังพอดี) ให้เชื่อ backend ไปก่อนเหมือนเดิม
+      if (sensor != null &&
+          !DashboardMapper.isFactorCritical(a.factor, sensor,
+              thresholds: thresholds)) {
+        continue;
       }
-      if (DebugFlags.alwaysShowCriticalOnLoad &&
-          criticals.isNotEmpty &&
-          mounted) {
-        _showCriticalAlertQueue(criticals);
+
+      final factorKey = 'CRITICAL_${a.factor.toUpperCase()}';
+      // เด้งซ้ำได้ตามโหมดทดสอบเสมอ ไม่งั้นเช็คสถานะ acknowledge ที่ persist ไว้
+      final forceDebug = DebugFlags.alwaysShowCriticalOnLoad;
+      final alreadyAcked =
+          !forceDebug && await SuggestionAckStore.instance.isAcknowledged(factorKey);
+      final alreadyShownThisSession =
+          !forceDebug && _shownThisSessionFactors.contains(factorKey);
+      if (!alreadyAcked && !alreadyShownThisSession) {
+        toShow.add(a);
+        _shownThisSessionFactors.add(factorKey);
       }
-      return;
     }
 
-    // หา critical ที่ยังไม่เคยเห็น
-    final newCriticals =
-        criticals.where((a) => !_seenCriticalIds.contains(a.id)).toList();
-
-    if (newCriticals.isNotEmpty && mounted) {
-      for (final a in newCriticals) {
-        _seenCriticalIds.add(a.id);
-      }
-      _showCriticalAlertQueue(newCriticals);
+    if (toShow.isNotEmpty && mounted) {
+      _showCriticalAlertQueue(toShow);
     }
   }
 
   /// เด้ง popup แจ้งเตือน critical ทีละอัน (ถ้ามีหลายอันเข้าคิวต่อกัน)
-  /// ผู้ใช้ต้องกด "Got it" หรือ "View Room Status" เพื่อปิด — ไม่ปิดเองอัตโนมัติ
+  /// ผู้ใช้ต้องกดปุ่มใดปุ่มหนึ่งใน dialog เพื่อปิด — ไม่ปิดเองอัตโนมัติ (บังคับ
+  /// ให้เห็นจริงๆ ก่อนจะกลับไปใช้แอปต่อได้)
   Future<void> _showCriticalAlertQueue(List<AlertDto> alerts) async {
     for (final alert in alerts) {
       if (!mounted) return;

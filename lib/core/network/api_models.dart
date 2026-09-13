@@ -53,6 +53,9 @@ class AlertDto {
   final double value;
   final double threshold;
   final DateTime? timestamp;
+  // true เมื่อ backend เห็นว่าปัญหานี้กลับสู่ภาวะปกติแล้ว — แถวเก่าที่ backend
+  // เวอร์ชันก่อนหน้ายังไม่มี field นี้จะถือว่า false (ยัง active) ไปก่อน
+  final bool resolved;
 
   const AlertDto({
     required this.id,
@@ -63,6 +66,7 @@ class AlertDto {
     required this.value,
     required this.threshold,
     this.timestamp,
+    this.resolved = false,
   });
 
   bool get isCritical => level == 'CRITICAL';
@@ -77,6 +81,7 @@ class AlertDto {
       value: _toDouble(json['value']),
       threshold: _toDouble(json['threshold']),
       timestamp: DateTime.tryParse((json['timestamp'] ?? '').toString()),
+      resolved: json['resolved'] == true,
     );
   }
 }

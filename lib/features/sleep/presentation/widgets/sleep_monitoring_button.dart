@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/network/api_service.dart';
+import '../../../../core/events/dashboard_refresh_bus.dart';
 import '../../models/sleep_models.dart';
 
 class SleepMonitoringButton extends StatefulWidget {
@@ -156,6 +157,13 @@ class _SleepMonitoringButtonState extends State<SleepMonitoringButton> {
               sleepEnd: end.millisecondsSinceEpoch,
             );
             api.dispose();
+
+            // แจ้งหน้า Home ให้โหลดข้อมูลใหม่ทันที (การ์ด Morning Report จะได้
+            // ไม่ต้องรอ auto-refresh รอบถัดไปถึงจะเห็นรายงานที่เพิ่งสร้าง —
+            // เพราะ IndexedStack ทำให้หน้า Home ไม่ reload เองตอนสลับแท็บ)
+            if (result == ReportResult.success) {
+              DashboardRefreshBus.instance.notifyDataChanged();
+            }
 
             if (!context.mounted) return;
             _showMonitoringStoppedSheet(context, duration, result);

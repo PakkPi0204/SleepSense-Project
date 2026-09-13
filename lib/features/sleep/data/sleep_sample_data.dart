@@ -4,13 +4,14 @@ import '../../../core/theme/app_colors.dart';
 import '../models/sleep_models.dart';
 
 const sampleSleepReadiness = SleepReadiness(
-  score: 82,
+  score: 92,
   maxScore: 100,
   status: 'Good',
   message: 'Your bedroom is mostly ready for sleep.',
   factors: [
+    ReadinessFactor(label: 'Room', percent: 100, color: AppColors.secondary),
     ReadinessFactor(label: 'Air', percent: 94, color: AppColors.secondary),
-    ReadinessFactor(label: 'Light', percent: 60, color: AppColors.accent),
+    ReadinessFactor(label: 'Light', percent: 74, color: AppColors.secondary),
     ReadinessFactor(label: 'Sound', percent: 88, color: AppColors.secondary),
   ],
 );
