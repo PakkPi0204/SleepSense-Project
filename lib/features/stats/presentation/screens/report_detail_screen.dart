@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/network/api_models.dart';
+import '../../../../shared/utils/text_format.dart';
 
 /// หน้ารายละเอียด Morning Report ของคืนหนึ่ง
 class ReportDetailScreen extends StatelessWidget {
@@ -168,7 +169,8 @@ class ReportDetailScreen extends StatelessWidget {
                           fontSize: 18,
                           fontWeight: FontWeight.w600)),
                   const SizedBox(height: 14),
-                  ...report.anomalies.map((a) => _bullet(a, AppColors.accent,
+                  ...report.anomalies.map((a) => _bullet(
+                      roundDecimalsInText(a), AppColors.accent,
                       Icons.warning_amber_rounded)),
                 ],
 
@@ -181,8 +183,9 @@ class ReportDetailScreen extends StatelessWidget {
                           fontSize: 18,
                           fontWeight: FontWeight.w600)),
                   const SizedBox(height: 14),
-                  ...report.suggestions.map((s) => _bullet(s,
-                      AppColors.secondary, Icons.lightbulb_outline)),
+                  ...report.suggestions.map((s) => _bullet(
+                      roundDecimalsInText(s), AppColors.secondary,
+                      Icons.lightbulb_outline)),
                 ],
               ],
             ),

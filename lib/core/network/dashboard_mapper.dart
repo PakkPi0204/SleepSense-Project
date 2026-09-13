@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../network/api_models.dart';
+import '../scoring/environment_scoring.dart';
 import '../../features/dashboard/models/dashboard_models.dart';
 
 /// แปลงข้อมูลจาก backend (DTO) → UI models ที่หน้าจอใช้อยู่แล้ว
@@ -146,68 +147,21 @@ class DashboardMapper {
   }
 
   /// คำนวณ environment score จากค่า sensor (0-100) โดยอิงตาม threshold ของผู้ใช้
+  ///
+  /// ใช้สูตรเดียวกับ [SleepMapper.toReadiness] เป๊ะๆ ผ่าน [EnvironmentScoring]
+  /// ที่ใช้ร่วมกัน เพื่อไม่ให้หน้า Home กับหน้า Sleep คิดคะแนนไม่ตรงกันสำหรับ
+  /// sensor ชุดเดียวกัน (เดิมหน้านี้ใช้สูตร "หัก" คนละแบบกับหน้า Sleep)
   static EnvironmentScore toEnvironmentScore(
     SensorDataDto d, {
     ThresholdSettingsDto? thresholds,
   }) {
-    final tempMin = thresholds?.temperatureMin ?? 18;
-    final tempMax = thresholds?.temperatureMax ?? 26;
-    final tempCriticalMin = thresholds?.temperatureCriticalMin ?? 15;
-    final tempCriticalMax = thresholds?.temperatureCriticalMax ?? 32;
-
-    final humidityMin = thresholds?.humidityMin ?? 30;
-    final humidityMax = thresholds?.humidityMax ?? 60;
-    final humidityCriticalMin = thresholds?.humidityCriticalMin ?? 20;
-    final humidityCriticalMax = thresholds?.humidityCriticalMax ?? 70;
-
-    final co2Warning = thresholds?.co2Warning ?? 1000;
-    final co2Critical = thresholds?.co2Critical ?? 2000;
-
-    final pm25Warning = thresholds?.pm25Warning ?? 35;
-    final pm25Critical = thresholds?.pm25Critical ?? 75;
-
-    final lightWarning = thresholds?.lightMax ?? 50;
-    final lightCritical = thresholds?.lightCritical ?? 200;
-
-    final noiseWarning = thresholds?.noiseWarning ?? 40;
-    final noiseCritical = thresholds?.noiseCritical ?? 60;
-
-    int score = 100;
-    if (d.co2 > 0) {
-      if (d.co2 > co2Warning) score -= 20;
-      if (d.co2 > co2Critical) score -= 20; // รวม -40 เมื่อวิกฤต
-    }
-    if (d.temperature < tempMin || d.temperature > tempMax) score -= 15;
-    if (d.temperature < tempCriticalMin || d.temperature > tempCriticalMax) {
-      score -= 15; // รวม -30 เมื่อวิกฤต
-    }
-    if (d.humidity > 0 && (d.humidity < humidityMin || d.humidity > humidityMax)) {
-      score -= 10;
-    }
-    if (d.humidity > 0 &&
-        (d.humidity < humidityCriticalMin ||
-            d.humidity > humidityCriticalMax)) {
-      score -= 10; // รวม -20 เมื่อวิกฤต
-    }
-    if (d.pm25 > pm25Warning) score -= 15;
-    if (d.pm25 > pm25Critical) score -= 15; // รวม -30 เมื่อวิกฤต
-    if (d.noiseLevel > noiseWarning) score -= 10;
-    if (d.noiseLevel > noiseCritical) score -= 10; // รวม -20 เมื่อวิกฤต
-    if (d.lightIntensity > lightWarning) score -= 10;
-    if (d.lightIntensity > lightCritical) score -= 10; // รวม -20 เมื่อวิกฤต
-    if (score < 0) score = 0;
-
-    final status = score >= 80
-        ? 'Good'
-        : score >= 50
-            ? 'Moderate'
-            : 'Poor';
+    final scores = EnvironmentScoring.factorScores(d, thresholds: thresholds);
 
     return EnvironmentScore(
       title: 'Sleep Environment Score',
-      value: score,
+      value: scores.overall,
       maxValue: 100,
-      status: status,
+      status: EnvironmentScoring.statusFor(scores.overall),
     );
   }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
 import 'api_models.dart';
+import '../scoring/environment_scoring.dart';
 import '../../features/sleep/models/sleep_models.dart';
 
 /// แปลง SensorDataDto → models ของหน้า Sleep
@@ -15,64 +16,24 @@ import '../../features/sleep/models/sleep_models.dart';
 /// sensor ตัวเดียวกันตรงกันเสมอไม่ว่าจะดูจากหน้าไหน
 ///
 /// เดิมยังมีอีกปัญหาซ้อนอยู่ในคะแนน "Sleep Readiness" เอง (แยกจากปัญหา
-/// threshold ไม่ตรงกันด้านบน): สูตรคะแนนของ Light/Sound เป็นแบบ "ขั้นบันได"
-/// (เช่น Light จะได้ 60% เสมอตราบใดที่ยังไม่ต่ำกว่า 5 lux แม้จะอยู่ในเกณฑ์
-/// Optimal อยู่แล้วก็ตาม) และคะแนนรวมก็ไม่เคยเอาอุณหภูมิ/ความชื้นมาคิดด้วยเลย
-/// (มีแค่ Air/Light/Sound) ผลคือถึงจะแก้ threshold ให้ตรงกันแล้ว การ์ด Sleep
-/// Readiness ก็ยังโชว์ 83/100 อยู่ดี ทั้งที่ Sleep Environment Score หน้า Home
-/// ขึ้น 100/100 — จึงปรับคะแนนทุกด้านให้เป็นสเกลต่อเนื่อง (100 เมื่ออยู่ในช่วง
-/// optimal ไล่ลงเป็นเส้นตรงจนถึง 0 ที่ค่า critical) และเพิ่มอุณหภูมิ/ความชื้น
-/// เข้ามาเป็นอีกหนึ่ง factor ("Room") ในคะแนนรวมด้วย ให้ตรรกะเดียวกับ
-/// DashboardMapper.toEnvironmentScore เป๊ะๆ (อยู่ในช่วง optimal ทุกตัว = 100)
+/// threshold ไม่ตรงกันด้านบน): คะแนนรวมของหน้านี้กับ "Sleep Environment
+/// Score" หน้า Home คำนวณคนละสูตร (หน้า Home ใช้สูตร "หัก" ทีละก้อนตาม
+/// warning/critical, หน้านี้ใช้สูตร "ไล่เชิงเส้น") ทำให้ sensor ชุดเดียวกัน
+/// ได้คะแนนไม่ตรงกันแม้ threshold จะตรงกันแล้วก็ตาม จึงย้ายสูตรคำนวณไปไว้ที่
+/// เดียวใน [EnvironmentScoring] แล้วให้ทั้งสองหน้าเรียกใช้ร่วมกัน
+/// (ดู DashboardMapper.toEnvironmentScore) เพื่อการันตีว่าตัวเลขตรงกันเสมอ
 class SleepMapper {
   SleepMapper._();
 
   /// คำนวณ Sleep Readiness จากค่า sensor โดยอิงตาม threshold ของผู้ใช้ (ถ้ามี)
+  /// — ใช้สูตรเดียวกับ Sleep Environment Score หน้า Home ผ่าน [EnvironmentScoring]
   static SleepReadiness toReadiness(
     SensorDataDto d, {
     ThresholdSettingsDto? thresholds,
   }) {
-    final tempMin = thresholds?.temperatureMin ?? 18;
-    final tempMax = thresholds?.temperatureMax ?? 26;
-    final tempCriticalMin = thresholds?.temperatureCriticalMin ?? 15;
-    final tempCriticalMax = thresholds?.temperatureCriticalMax ?? 32;
-
-    final humidityMin = thresholds?.humidityMin ?? 30;
-    final humidityMax = thresholds?.humidityMax ?? 60;
-    final humidityCriticalMin = thresholds?.humidityCriticalMin ?? 20;
-    final humidityCriticalMax = thresholds?.humidityCriticalMax ?? 70;
-
-    final co2Warning = thresholds?.co2Warning ?? 1000;
-    final co2Critical = thresholds?.co2Critical ?? 2000;
-    final pm25Warning = thresholds?.pm25Warning ?? 35;
-    final pm25Critical = thresholds?.pm25Critical ?? 75;
-
-    final lightWarning = thresholds?.lightMax ?? 50;
-    final lightCritical = thresholds?.lightCritical ?? 200;
-    final noiseWarning = thresholds?.noiseWarning ?? 40;
-    final noiseCritical = thresholds?.noiseCritical ?? 60;
-
-    // คะแนนแต่ละด้าน (0-100) แบบต่อเนื่อง: 100 เต็มเมื่ออยู่ในช่วง optimal,
-    // ไล่ลงเป็นเส้นตรงจนถึง 0 ที่ค่า critical — ตรงกับเกณฑ์ที่ Environment
-    // Checklist ใช้ตัดสิน Optimal/Warning ด้านล่างเป๊ะๆ ไม่มีจุดที่ยัง
-    // "Optimal" อยู่แต่คะแนนถูกตรึงไว้ต่ำกว่า 100 เหมือนสูตรเดิม
-    final room = ((_rangeScore(d.temperature, tempMin, tempMax,
-                tempCriticalMin, tempCriticalMax) +
-            _rangeScore(d.humidity, humidityMin, humidityMax,
-                humidityCriticalMin, humidityCriticalMax)) /
-        2);
-    final air = ((_upperScore(d.co2, co2Warning, co2Critical) +
-            _upperScore(d.pm25, pm25Warning, pm25Critical)) /
-        2);
-    final light = _upperScore(d.lightIntensity, lightWarning, lightCritical);
-    final sound = _upperScore(d.noiseLevel, noiseWarning, noiseCritical);
-
-    final overall = ((room + air + light + sound) / 4).round();
-    final status = overall >= 80
-        ? 'Good'
-        : overall >= 50
-            ? 'Moderate'
-            : 'Poor';
+    final scores = EnvironmentScoring.factorScores(d, thresholds: thresholds);
+    final overall = scores.overall;
+    final status = EnvironmentScoring.statusFor(overall);
     final message = overall >= 80
         ? 'Your bedroom is mostly ready for sleep.'
         : overall >= 50
@@ -87,23 +48,23 @@ class SleepMapper {
       factors: [
         ReadinessFactor(
           label: 'Room',
-          percent: room.round(),
-          color: room >= 70 ? AppColors.secondary : AppColors.accent,
+          percent: scores.room.round(),
+          color: scores.room >= 70 ? AppColors.secondary : AppColors.accent,
         ),
         ReadinessFactor(
           label: 'Air',
-          percent: air.round(),
-          color: air >= 70 ? AppColors.secondary : AppColors.accent,
+          percent: scores.air.round(),
+          color: scores.air >= 70 ? AppColors.secondary : AppColors.accent,
         ),
         ReadinessFactor(
           label: 'Light',
-          percent: light.round(),
-          color: light >= 70 ? AppColors.secondary : AppColors.accent,
+          percent: scores.light.round(),
+          color: scores.light >= 70 ? AppColors.secondary : AppColors.accent,
         ),
         ReadinessFactor(
           label: 'Sound',
-          percent: sound.round(),
-          color: sound >= 70 ? AppColors.secondary : AppColors.accent,
+          percent: scores.sound.round(),
+          color: scores.sound >= 70 ? AppColors.secondary : AppColors.accent,
         ),
       ],
     );
@@ -153,33 +114,5 @@ class SleepMapper {
       status: ok ? okStatus : warnStatus,
       warning: !ok,
     );
-  }
-
-  /// คะแนนของค่าที่ "ยิ่งสูงยิ่งแย่ทางเดียว" (CO2 / PM2.5 / Light / Noise)
-  /// อยู่ในช่วง optimal (<= warning) = 100 เต็ม ไล่ลงเป็นเส้นตรงจนถึง 0 ที่
-  /// ค่า critical แล้วค้างที่ 0 ต่อจากนั้น
-  static double _upperScore(double v, double warning, double critical) {
-    if (v <= warning) return 100;
-    if (critical <= warning) return 0; // กัน config ผิดพลาดหารด้วย 0
-    if (v >= critical) return 0;
-    final ratio = (v - warning) / (critical - warning);
-    return (100 * (1 - ratio)).clamp(0, 100);
-  }
-
-  /// คะแนนของค่าที่มีทั้งขอบล่าง-บน (Temperature / Humidity) — อยู่ในช่วง
-  /// [min, max] = 100 เต็ม ไล่ลงเป็นเส้นตรงจนถึง 0 ที่ขอบ critical ฝั่งนั้นๆ
-  static double _rangeScore(
-      double v, double min, double max, double criticalMin, double criticalMax) {
-    if (v >= min && v <= max) return 100;
-    if (v < min) {
-      if (criticalMin >= min) return 0;
-      if (v <= criticalMin) return 0;
-      final ratio = (min - v) / (min - criticalMin);
-      return (100 * (1 - ratio)).clamp(0, 100);
-    }
-    if (criticalMax <= max) return 0;
-    if (v >= criticalMax) return 0;
-    final ratio = (v - max) / (criticalMax - max);
-    return (100 * (1 - ratio)).clamp(0, 100);
   }
 }

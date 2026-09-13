@@ -312,8 +312,35 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
     final criticals = alerts.where((a) => a.level == 'CRITICAL').toList();
     if (criticals.isEmpty) return;
 
-    final toShow = <AlertDto>[];
+    // กรองให้เหลือแค่ "แถวล่าสุด 1 แถวต่อ 1 factor" ก่อนเสมอ — backend เก็บ
+    // alert เป็น log ประวัติศาสตร์ล้วนๆ (ไม่ resolved ชัดเจน) ดังนั้น factor
+    // เดียวกัน (เช่น TEMPERATURE) อาจมีหลายแถวพร้อมกันใน /active หรือ /recent
+    // (คนละค่า/คนละ threshold ที่บันทึกไว้ตอนนั้น เช่น ก่อน-หลังผู้ใช้ปรับ
+    // threshold ใน Settings) เดิมโค้ดไม่ได้กรองตรงนี้ อาศัยแค่สถานะ
+    // acknowledge/เคยเห็นแล้วมากันไม่ให้เด้งซ้ำ ซึ่งพังทันทีถ้ามีอะไรบายพาส
+    // การเช็คนั้น (เช่น debug flag "บังคับเด้ง Critical Popup") ทำให้ factor
+    // เดียวกันเด้ง popup ซ้อนกันหลายอันในรอบเดียว — กรองตรงนี้ไว้ก่อนเลยเพื่อ
+    // การันตีว่า 1 factor จะขึ้นได้อย่างมากแค่ popup เดียวต่อการเช็ค 1 ครั้ง
+    // ไม่ว่าปลายทางจะเช็ค ack/session อย่างไรต่อก็ตาม
+    final latestPerFactor = <String, AlertDto>{};
     for (final a in criticals) {
+      final key = a.factor.toUpperCase();
+      final existing = latestPerFactor[key];
+      if (existing == null) {
+        latestPerFactor[key] = a;
+        continue;
+      }
+      final existingTime = existing.timestamp;
+      final currentTime = a.timestamp;
+      if (existingTime == null ||
+          (currentTime != null && currentTime.isAfter(existingTime))) {
+        latestPerFactor[key] = a;
+      }
+    }
+    final dedupedCriticals = latestPerFactor.values.toList();
+
+    final toShow = <AlertDto>[];
+    for (final a in dedupedCriticals) {
       // ถ้ามีค่า sensor ของรอบนี้ ให้เช็คซ้ำกับ threshold ปัจจุบันก่อน — ถ้า
       // ไม่วิกฤตแล้ว (เช่น ผู้ใช้เพิ่งปรับ threshold ให้กว้างขึ้น) ข้ามแถวนี้ไป
       // เลย ไม่ต้องบังคับเด้ง popup ของปัญหาที่ไม่ใช่ปัญหาอีกต่อไป ถ้าไม่มีค่า
