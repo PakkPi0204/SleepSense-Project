@@ -21,6 +21,7 @@ public class CorsConfig {
         // จำกัดเฉพาะ method ที่ระบบใช้จริง (ปลอดภัยกว่า allow ทั้งหมด)
         config.addAllowedMethod("GET");
         config.addAllowedMethod("POST");
+        config.addAllowedMethod("PUT");
         config.addAllowedMethod("DELETE");
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

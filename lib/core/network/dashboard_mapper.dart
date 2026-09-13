@@ -37,7 +37,8 @@ class DashboardMapper {
         status: d.humidity < 0 ? 'No sensor' : _rangeStatus(d.humidity, 30, 60),
         level: d.humidity < 0
             ? SensorLevel.normal
-            : _rangeLevel(d.humidity, 30, 60),
+            : _rangeLevel(d.humidity, 30, 60,
+                criticalMin: 20, criticalMax: 70),
       ),
       SensorReading(
         icon: Icons.air,
@@ -57,10 +58,12 @@ class DashboardMapper {
         icon: Icons.wb_sunny_outlined,
         title: 'Light',
         value: '${d.lightIntensity.round()} lux',
-        status: d.lightIntensity <= 50 ? 'Optimal' : 'Bright',
-        level: d.lightIntensity <= 50
-            ? SensorLevel.normal
-            : SensorLevel.warning,
+        status: d.lightIntensity > 200
+            ? 'Critical'
+            : d.lightIntensity > 50
+                ? 'Bright'
+                : 'Optimal',
+        level: _lightLevel(d.lightIntensity),
       ),
       SensorReading(
         icon: Icons.volume_up_outlined,
@@ -80,12 +83,17 @@ class DashboardMapper {
   }
 
   // ── ระดับความรุนแรงตาม threshold (สำหรับเลือกสี) ──
+  // ค่าเหล่านี้ต้องตรงกับ ThresholdConfig.java ฝั่ง backend เสมอ
   static SensorLevel _tempLevel(double t) {
+    if (t < 15 || t > 32) return SensorLevel.critical;
     if (t < 18 || t > 26) return SensorLevel.warning;
     return SensorLevel.normal;
   }
 
-  static SensorLevel _rangeLevel(double v, double min, double max) {
+  static SensorLevel _rangeLevel(double v, double min, double max,
+      {double? criticalMin, double? criticalMax}) {
+    if (criticalMin != null && v < criticalMin) return SensorLevel.critical;
+    if (criticalMax != null && v > criticalMax) return SensorLevel.critical;
     if (v < min || v > max) return SensorLevel.warning;
     return SensorLevel.normal;
   }
@@ -104,7 +112,13 @@ class DashboardMapper {
 
   static SensorLevel _noiseLevel(double n) {
     if (n >= 60) return SensorLevel.critical;
-    if (n >= 35) return SensorLevel.warning;
+    if (n >= 40) return SensorLevel.warning;
+    return SensorLevel.normal;
+  }
+
+  static SensorLevel _lightLevel(double lux) {
+    if (lux > 200) return SensorLevel.critical;
+    if (lux > 50) return SensorLevel.warning;
     return SensorLevel.normal;
   }
 
@@ -113,13 +127,18 @@ class DashboardMapper {
     int score = 100;
     if (d.co2 > 0) {
       if (d.co2 > 1000) score -= 20;
-      if (d.co2 > 2000) score -= 20;
+      if (d.co2 > 2000) score -= 20; // รวม -40 เมื่อวิกฤต
     }
     if (d.temperature < 18 || d.temperature > 26) score -= 15;
+    if (d.temperature < 15 || d.temperature > 32) score -= 15; // รวม -30 เมื่อวิกฤต
+    if (d.humidity > 0 && (d.humidity < 30 || d.humidity > 60)) score -= 10;
+    if (d.humidity > 0 && (d.humidity < 20 || d.humidity > 70)) score -= 10;
     if (d.pm25 > 35) score -= 15;
-    if (d.pm25 > 75) score -= 15;
-    if (d.noiseLevel > 35) score -= 10;
+    if (d.pm25 > 75) score -= 15; // รวม -30 เมื่อวิกฤต
+    if (d.noiseLevel > 40) score -= 10;
+    if (d.noiseLevel > 60) score -= 10; // รวม -20 เมื่อวิกฤต
     if (d.lightIntensity > 50) score -= 10;
+    if (d.lightIntensity > 200) score -= 10; // รวม -20 เมื่อวิกฤต
     if (score < 0) score = 0;
 
     final status = score >= 80
@@ -165,6 +184,7 @@ class DashboardMapper {
   static String _fmt(double v) => v.toStringAsFixed(1);
 
   static String _tempStatus(double t) {
+    if (t < 15 || t > 32) return 'Critical';
     if (t >= 20 && t <= 24) return 'Optimal';
     if (t >= 18 && t <= 26) return 'Good';
     return 'Warning';
@@ -188,7 +208,7 @@ class DashboardMapper {
   }
 
   static String _noiseStatus(double n) {
-    if (n < 35) return 'Quiet';
+    if (n < 40) return 'Quiet';
     if (n < 60) return 'Warning';
     return 'Loud';
   }

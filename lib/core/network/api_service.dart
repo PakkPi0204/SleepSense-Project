@@ -110,6 +110,55 @@ class ApiService {
     }
   }
 
+  /// ดึงค่า threshold ปัจจุบันของ device (custom ถ้ามี ไม่งั้นเป็น default)
+  Future<ThresholdSettingsDto> fetchThresholds({String? deviceId}) async {
+    final id = deviceId ?? ApiConfig.deviceId;
+    final data = await _getData(ApiConfig.thresholds(id));
+    return ThresholdSettingsDto.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// บันทึกค่า threshold ที่ผู้ใช้ปรับเอง — throw ApiException ถ้าค่าไม่สมเหตุสมผล
+  /// (เช่น warning มากกว่า critical) โดย backend จะส่งข้อความอธิบายกลับมา
+  Future<ThresholdSettingsDto> updateThresholds(
+      ThresholdSettingsDto settings) async {
+    late final http.Response res;
+    try {
+      res = await _client
+          .put(
+            Uri.parse(ApiConfig.thresholds(settings.deviceId)),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(settings.toJson()),
+          )
+          .timeout(timeout);
+    } catch (e) {
+      throw ApiException('เชื่อมต่อ backend ไม่ได้: $e');
+    }
+
+    final body = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
+    if (body['success'] != true) {
+      throw ApiException((body['message'] ?? 'บันทึกไม่สำเร็จ').toString());
+    }
+    return ThresholdSettingsDto.fromJson(body['data'] as Map<String, dynamic>);
+  }
+
+  /// รีเซ็ต threshold กลับไปใช้ค่า default ของระบบ
+  Future<ThresholdSettingsDto> resetThresholds({String? deviceId}) async {
+    final id = deviceId ?? ApiConfig.deviceId;
+    late final http.Response res;
+    try {
+      res = await _client
+          .delete(Uri.parse(ApiConfig.thresholds(id)))
+          .timeout(timeout);
+    } catch (e) {
+      throw ApiException('เชื่อมต่อ backend ไม่ได้: $e');
+    }
+    final body = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
+    if (body['success'] != true) {
+      throw ApiException((body['message'] ?? 'รีเซ็ตไม่สำเร็จ').toString());
+    }
+    return ThresholdSettingsDto.fromJson(body['data'] as Map<String, dynamic>);
+  }
+
   // ──────────────────────────────────────────────
   /// ยิง GET แล้ว unwrap { success, message, data }
   Future<dynamic> _getData(String url) async {

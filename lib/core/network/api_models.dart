@@ -151,11 +151,144 @@ class MorningReportDto {
   }
 }
 
+/// ตรงกับ ThresholdSettings ฝั่ง backend — ค่า threshold ที่ผู้ใช้ปรับเองได้
+/// ทุกฟิลด์เป็น nullable: null = ยังไม่ได้ปรับเอง ให้ backend ใช้ค่า default แทน
+class ThresholdSettingsDto {
+  final String deviceId;
+  final double? co2Warning;
+  final double? co2Critical;
+  final double? temperatureMin;
+  final double? temperatureMax;
+  final double? temperatureCriticalMin;
+  final double? temperatureCriticalMax;
+  final double? humidityMin;
+  final double? humidityMax;
+  final double? humidityCriticalMin;
+  final double? humidityCriticalMax;
+  final double? pm25Warning;
+  final double? pm25Critical;
+  final double? lightMax;
+  final double? lightCritical;
+  final double? noiseWarning;
+  final double? noiseCritical;
+  final bool customized;
+
+  const ThresholdSettingsDto({
+    required this.deviceId,
+    this.co2Warning,
+    this.co2Critical,
+    this.temperatureMin,
+    this.temperatureMax,
+    this.temperatureCriticalMin,
+    this.temperatureCriticalMax,
+    this.humidityMin,
+    this.humidityMax,
+    this.humidityCriticalMin,
+    this.humidityCriticalMax,
+    this.pm25Warning,
+    this.pm25Critical,
+    this.lightMax,
+    this.lightCritical,
+    this.noiseWarning,
+    this.noiseCritical,
+    this.customized = false,
+  });
+
+  factory ThresholdSettingsDto.fromJson(Map<String, dynamic> json) {
+    return ThresholdSettingsDto(
+      deviceId: (json['deviceId'] ?? '') as String,
+      co2Warning: _toDoubleOrNull(json['co2Warning']),
+      co2Critical: _toDoubleOrNull(json['co2Critical']),
+      temperatureMin: _toDoubleOrNull(json['temperatureMin']),
+      temperatureMax: _toDoubleOrNull(json['temperatureMax']),
+      temperatureCriticalMin: _toDoubleOrNull(json['temperatureCriticalMin']),
+      temperatureCriticalMax: _toDoubleOrNull(json['temperatureCriticalMax']),
+      humidityMin: _toDoubleOrNull(json['humidityMin']),
+      humidityMax: _toDoubleOrNull(json['humidityMax']),
+      humidityCriticalMin: _toDoubleOrNull(json['humidityCriticalMin']),
+      humidityCriticalMax: _toDoubleOrNull(json['humidityCriticalMax']),
+      pm25Warning: _toDoubleOrNull(json['pm25Warning']),
+      pm25Critical: _toDoubleOrNull(json['pm25Critical']),
+      lightMax: _toDoubleOrNull(json['lightMax']),
+      lightCritical: _toDoubleOrNull(json['lightCritical']),
+      noiseWarning: _toDoubleOrNull(json['noiseWarning']),
+      noiseCritical: _toDoubleOrNull(json['noiseCritical']),
+      customized: (json['customized'] ?? false) as bool,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'deviceId': deviceId,
+        'co2Warning': co2Warning,
+        'co2Critical': co2Critical,
+        'temperatureMin': temperatureMin,
+        'temperatureMax': temperatureMax,
+        'temperatureCriticalMin': temperatureCriticalMin,
+        'temperatureCriticalMax': temperatureCriticalMax,
+        'humidityMin': humidityMin,
+        'humidityMax': humidityMax,
+        'humidityCriticalMin': humidityCriticalMin,
+        'humidityCriticalMax': humidityCriticalMax,
+        'pm25Warning': pm25Warning,
+        'pm25Critical': pm25Critical,
+        'lightMax': lightMax,
+        'lightCritical': lightCritical,
+        'noiseWarning': noiseWarning,
+        'noiseCritical': noiseCritical,
+      };
+
+  ThresholdSettingsDto copyWith({
+    double? co2Warning,
+    double? co2Critical,
+    double? temperatureMin,
+    double? temperatureMax,
+    double? temperatureCriticalMin,
+    double? temperatureCriticalMax,
+    double? humidityMin,
+    double? humidityMax,
+    double? humidityCriticalMin,
+    double? humidityCriticalMax,
+    double? pm25Warning,
+    double? pm25Critical,
+    double? lightMax,
+    double? lightCritical,
+    double? noiseWarning,
+    double? noiseCritical,
+  }) {
+    return ThresholdSettingsDto(
+      deviceId: deviceId,
+      co2Warning: co2Warning ?? this.co2Warning,
+      co2Critical: co2Critical ?? this.co2Critical,
+      temperatureMin: temperatureMin ?? this.temperatureMin,
+      temperatureMax: temperatureMax ?? this.temperatureMax,
+      temperatureCriticalMin: temperatureCriticalMin ?? this.temperatureCriticalMin,
+      temperatureCriticalMax: temperatureCriticalMax ?? this.temperatureCriticalMax,
+      humidityMin: humidityMin ?? this.humidityMin,
+      humidityMax: humidityMax ?? this.humidityMax,
+      humidityCriticalMin: humidityCriticalMin ?? this.humidityCriticalMin,
+      humidityCriticalMax: humidityCriticalMax ?? this.humidityCriticalMax,
+      pm25Warning: pm25Warning ?? this.pm25Warning,
+      pm25Critical: pm25Critical ?? this.pm25Critical,
+      lightMax: lightMax ?? this.lightMax,
+      lightCritical: lightCritical ?? this.lightCritical,
+      noiseWarning: noiseWarning ?? this.noiseWarning,
+      noiseCritical: noiseCritical ?? this.noiseCritical,
+      customized: customized,
+    );
+  }
+}
+
 // ── helpers ──
 double _toDouble(dynamic v) {
   if (v == null) return 0.0;
   if (v is num) return v.toDouble();
   return double.tryParse(v.toString()) ?? 0.0;
+}
+
+double? _toDoubleOrNull(dynamic v) {
+  if (v == null) return null;
+  if (v is num) return v.toDouble();
+  return double.tryParse(v.toString());
 }
 
 List<String> _toStringList(dynamic v) {

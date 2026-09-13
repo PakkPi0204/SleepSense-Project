@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/network/api_config.dart';
 import '../../../../core/network/api_service.dart';
+import '../../../../core/debug/debug_flags.dart';
+import 'threshold_settings_screen.dart';
 
 /// หน้า Settings — แสดงข้อมูล device + สถานะการเชื่อมต่อ + ข้อมูลระบบ
 class SettingsScreen extends StatefulWidget {
@@ -18,6 +20,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _checking = true;
   bool _connected = false;
   String? _lastUpdate;
+  bool _debugAlwaysShowCritical = DebugFlags.alwaysShowCriticalOnLoad;
 
   @override
   void initState() {
@@ -91,6 +94,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   _infoTile(Icons.sensors, 'Sensors', '6 environmental sensors'),
                   const SizedBox(height: 28),
 
+                  // ── ปรับค่าการแจ้งเตือนเอง ──
+                  _sectionTitle('Alerts'),
+                  const SizedBox(height: 12),
+                  _navTile(
+                    icon: Icons.tune,
+                    label: 'ปรับค่าการแจ้งเตือน (Threshold)',
+                    subtitle: 'ปรับอุณหภูมิ ความชื้น ฝุ่น เสียง ฯลฯ ให้เข้ากับตัวเอง',
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                            builder: (_) => const ThresholdSettingsScreen()),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 28),
+
                   // ── เกี่ยวกับ ──
                   _sectionTitle('About'),
                   const SizedBox(height: 12),
@@ -98,6 +117,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   _infoTile(Icons.tag, 'Version', '1.0.0'),
                   _infoTile(Icons.bedtime_outlined, 'Purpose',
                       'Sleep environment monitoring'),
+                  const SizedBox(height: 28),
+
+                  // ── โหมดทดสอบ (dev only) ──
+                  _sectionTitle('Developer'),
+                  const SizedBox(height: 12),
+                  _debugCriticalToggle(),
                 ],
               ),
             ),
@@ -184,6 +209,65 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  /// tile ที่กดแล้วเด้งไปหน้าอื่น (ใช้กับ Threshold Settings)
+  Widget _navTile({
+    required IconData icon,
+    required String label,
+    String? subtitle,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.cardBorder),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.iconBox,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: AppColors.secondary, size: 20),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      color: AppColors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                          color: AppColors.neutral, fontSize: 12),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: AppColors.neutral),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _infoTile(IconData icon, String label, String value) {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -222,6 +306,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// สวิตช์โหมดทดสอบ: บังคับให้ critical alert popup เด้งทุกครั้งที่เจอ
+  /// แม้จะเป็นตัวที่ค้างอยู่แล้วตั้งแต่เปิดแอป — มีประโยชน์ตอนทดสอบ UI ของ popup
+  /// (ไม่ persist ข้ามการเปิดแอปใหม่)
+  Widget _debugCriticalToggle() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.cardBorder),
+      ),
+      child: SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        activeThumbColor: AppColors.accent,
+        title: const Text(
+          'บังคับเด้ง Critical Popup',
+          style: TextStyle(
+            color: AppColors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        subtitle: const Text(
+          'สำหรับทดสอบ — เด้ง popup ทันทีที่เปิดแอปถ้ามี critical alert ค้างอยู่\n'
+          'แม้เป็นตัวเก่าที่เคยเห็นแล้ว (ปกติจะรอ critical ใหม่เท่านั้น)',
+          style: TextStyle(color: AppColors.neutral, fontSize: 12, height: 1.4),
+        ),
+        value: _debugAlwaysShowCritical,
+        onChanged: (value) {
+          setState(() {
+            _debugAlwaysShowCritical = value;
+            DebugFlags.alwaysShowCriticalOnLoad = value;
+          });
+        },
       ),
     );
   }

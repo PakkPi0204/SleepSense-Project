@@ -68,7 +68,7 @@ class SleepMapper {
       _item(Icons.wb_sunny_outlined, 'Light', '${d.lightIntensity.round()} lux',
           d.lightIntensity <= 50, 'Optimal', 'Needs dimming'),
       _item(Icons.volume_up_outlined, 'Sound', '${d.noiseLevel.round()} dB',
-          d.noiseLevel < 35, 'Quiet', 'Reduce noise'),
+          d.noiseLevel < 40, 'Quiet', 'Reduce noise'),
     ];
   }
 
@@ -101,7 +101,7 @@ class SleepMapper {
 
   static int _soundScore(double db) {
     if (db < 30) return 100;
-    if (db < 35) return 88;
+    if (db < 40) return 88;
     if (db < 60) return 45;
     return 20;
   }

@@ -4,6 +4,42 @@ Spring Boot backend สำหรับโปรเจกต์ SleepSense — Io
 
 ---
 
+## วิธี Build & Run
+
+### สิ่งที่ต้องมีก่อน
+- Java 17 (JDK)
+- Maven (หรือใช้ IDE เช่น IntelliJ/VS Code ที่มี Maven ในตัว)
+- ไฟล์ Firebase service account key (JSON) — ดาวน์โหลดจาก Firebase Console →
+  Project Settings → Service Accounts → Generate new private key
+
+### ขั้นตอน
+1. วางไฟล์ Firebase key ที่ดาวน์โหลดมาไว้ที่
+   `sleepsense-backend/src/main/resources/firebase-service-account.json`
+2. แก้ `src/main/resources/application.properties` ให้ `firebase.database.url`
+   ตรงกับ Firestore project จริงของคุณ (ค่าเริ่มต้นเป็นแค่ placeholder)
+3. Build (ดาวน์โหลด dependency + compile + รัน unit test):
+   ```
+   cd sleepsense-backend
+   mvn clean install
+   ```
+4. รันเซิร์ฟเวอร์:
+   ```
+   mvn spring-boot:run
+   ```
+   หรือรันจาก jar ที่ build เสร็จแล้ว:
+   ```
+   java -jar target/sleepsense-backend-1.0.0.jar
+   ```
+5. เช็คว่าเซิร์ฟเวอร์ขึ้นสำเร็จ — ควรเห็น log "Started SleepSenseApplication"
+   แล้วลองเปิด `http://localhost:8080/api/thresholds?deviceId=test-device-01`
+   ในเบราว์เซอร์ ควรได้ JSON response กลับมา
+
+**หมายเหตุ:** ทุกครั้งที่แก้โค้ด Java หรือ `application.properties` ต้อง
+**restart เซิร์ฟเวอร์ใหม่** (`Ctrl+C` แล้วรัน `mvn spring-boot:run` อีกครั้ง)
+ค่าที่แก้ถึงจะมีผลจริง — ตัว build ไม่ได้ hot-reload อัตโนมัติ
+
+---
+
 ## Architecture
 
 ```

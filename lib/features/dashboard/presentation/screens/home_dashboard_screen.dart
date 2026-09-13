@@ -7,6 +7,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/network/api_service.dart';
 import '../../../../core/network/api_models.dart';
 import '../../../../core/network/dashboard_mapper.dart';
+import '../../../../core/debug/debug_flags.dart';
 import '../../../alerts/presentation/screens/alerts_screen.dart';
 import '../../../alerts/presentation/widgets/critical_alert_dialog.dart';
 import '../../data/dashboard_sample_data.dart';
@@ -153,16 +154,22 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
     );
   }
 
-  /// ตรวจ critical alert ใหม่ที่ยังไม่เคยเห็น แล้วเด้ง banner
+  /// ตรวจ critical alert ใหม่ที่ยังไม่เคยเห็น แล้วเด้ง popup
   void _checkNewCriticalAlerts(List<AlertDto> alerts) {
     final criticals = alerts.where((a) => a.level == 'CRITICAL').toList();
 
-    // รอบแรก (เพิ่งเปิดแอป) แค่จำ id ไว้ ไม่เด้ง — กันเด้งของเก่าทั้งกอง
+    // รอบแรก (เพิ่งเปิดแอป): ปกติแค่จำ id ไว้ ไม่เด้ง — กันเด้งของเก่าทั้งกอง
+    // ยกเว้นเปิดโหมดทดสอบไว้ (DebugFlags.alwaysShowCriticalOnLoad) จะเด้งให้ทุกตัวเลย
     if (_firstLoad) {
+      _firstLoad = false;
       for (final a in criticals) {
         _seenCriticalIds.add(a.id);
       }
-      _firstLoad = false;
+      if (DebugFlags.alwaysShowCriticalOnLoad &&
+          criticals.isNotEmpty &&
+          mounted) {
+        _showCriticalAlertQueue(criticals);
+      }
       return;
     }
 

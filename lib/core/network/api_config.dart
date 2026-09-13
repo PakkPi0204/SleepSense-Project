@@ -45,4 +45,5 @@ class ApiConfig {
   static String reportDelete(String reportId) => '$baseUrl/api/report/$reportId';
   static String reportGenerate(String id, int sleepStart, int sleepEnd) =>
       '$baseUrl/api/report/generate?deviceId=$id&sleepStart=$sleepStart&sleepEnd=$sleepEnd';
+  static String thresholds(String id) => '$baseUrl/api/thresholds?deviceId=$id';
 }
