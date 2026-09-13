@@ -8,6 +8,7 @@ import '../../../../core/network/api_service.dart';
 import '../../../../core/network/api_models.dart';
 import '../../../../core/network/dashboard_mapper.dart';
 import '../../../alerts/presentation/screens/alerts_screen.dart';
+import '../../../alerts/presentation/widgets/critical_alert_dialog.dart';
 import '../../data/dashboard_sample_data.dart';
 import '../../models/dashboard_models.dart';
 import '../widgets/environment_score_card.dart';
@@ -180,39 +181,27 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
       for (final a in newCriticals) {
         _seenCriticalIds.add(a.id);
       }
-      _showCriticalBanner(newCriticals.first);
+      _showCriticalAlertQueue(newCriticals);
     }
   }
 
-  /// เด้ง banner แจ้งเตือน critical (ค้าง 6 วิ + กดปิดได้)
-  void _showCriticalBanner(AlertDto alert) {
-    HapticFeedback.heavyImpact(); // สั่นแจ้งเตือน (บนมือถือ)
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.clearMaterialBanners(); // เคลียร์ banner เก่าก่อน
-    messenger.showMaterialBanner(
-      MaterialBanner(
-        backgroundColor: const Color(0xFF3A1519),
-        leading: const Icon(Icons.warning_amber_rounded,
-            color: Color(0xFFE85D5D), size: 28),
-        content: Text(
-          '⚠️ แจ้งเตือนวิกฤต: ${alert.message}',
-          style: const TextStyle(
-              color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => messenger.hideCurrentMaterialBanner(),
-            child: const Text('ปิด',
-                style: TextStyle(color: Color(0xFFE85D5D))),
-          ),
-        ],
-      ),
-    );
-
-    // ปิดเองอัตโนมัติหลัง 6 วิ
-    Future.delayed(const Duration(seconds: 6), () {
-      if (mounted) messenger.hideCurrentMaterialBanner();
-    });
+  /// เด้ง popup แจ้งเตือน critical ทีละอัน (ถ้ามีหลายอันเข้าคิวต่อกัน)
+  /// ผู้ใช้ต้องกด "Got it" หรือ "View Room Status" เพื่อปิด — ไม่ปิดเองอัตโนมัติ
+  Future<void> _showCriticalAlertQueue(List<AlertDto> alerts) async {
+    for (final alert in alerts) {
+      if (!mounted) return;
+      HapticFeedback.heavyImpact(); // สั่นแจ้งเตือน (บนมือถือ)
+      await CriticalAlertDialog.show(
+        context,
+        alert,
+        onViewRoomStatus: () {
+          if (!mounted) return;
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const AlertsScreen()),
+          );
+        },
+      );
+    }
   }
 
   Widget _alertsSection() {
