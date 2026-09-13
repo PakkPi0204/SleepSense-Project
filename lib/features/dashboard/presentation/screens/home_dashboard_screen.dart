@@ -25,8 +25,10 @@ class HomeDashboardScreen extends StatefulWidget {
   State<HomeDashboardScreen> createState() => _HomeDashboardScreenState();
 }
 
-class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
+class _HomeDashboardScreenState extends State<HomeDashboardScreen>
+    with SingleTickerProviderStateMixin {
   final ApiService _api = ApiService();
+  late final AnimationController _pulseController;
 
   bool _loading = true;
   String? _error;
@@ -42,11 +44,15 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
   bool _firstLoad = true;
   bool _deviceOffline = false;
 
-  @override
   Timer? _autoRefresh;
 
+  @override
   void initState() {
     super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat(reverse: true);
     _loadData();
     // auto-refresh ทุก 30 วินาที (ตรงกับ ESP32)
     _autoRefresh = Timer.periodic(
@@ -57,6 +63,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
 
   @override
   void dispose() {
+    _pulseController.dispose();
     _autoRefresh?.cancel();
     _api.dispose();
     super.dispose();
@@ -208,6 +215,9 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
     final criticalCount =
         _alerts.where((a) => a.level == 'CRITICAL').length;
     final hasAlerts = _alerts.isNotEmpty;
+    const criticalColor = Color(0xFFE85D5D);
+    final accentColor =
+        criticalCount > 0 ? criticalColor : AppColors.accent;
 
     return GestureDetector(
       onTap: () {
@@ -218,14 +228,14 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
       child: Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
-          color: AppColors.card,
+          // มี critical: เติมพื้นหลังสีแดงจางๆ ทั้งการ์ดให้เด่นชัดกว่าแค่กรอบ
+          color: criticalCount > 0
+              ? criticalColor.withOpacity(0.12)
+              : AppColors.card,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: hasAlerts
-                ? (criticalCount > 0
-                    ? const Color(0xFFE85D5D)
-                    : AppColors.accent)
-                : AppColors.cardBorder,
+            color: hasAlerts ? accentColor : AppColors.cardBorder,
+            width: criticalCount > 0 ? 1.4 : 1,
           ),
         ),
         child: Row(
@@ -234,10 +244,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: hasAlerts
-                    ? (criticalCount > 0
-                        ? const Color(0xFFE85D5D)
-                        : AppColors.accent)
-                        .withOpacity(0.15)
+                    ? accentColor.withOpacity(0.15)
                     : AppColors.iconBox,
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -245,11 +252,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                 hasAlerts
                     ? Icons.notifications_active_outlined
                     : Icons.notifications_none,
-                color: hasAlerts
-                    ? (criticalCount > 0
-                        ? const Color(0xFFE85D5D)
-                        : AppColors.accent)
-                    : AppColors.neutral,
+                color: hasAlerts ? accentColor : AppColors.neutral,
                 size: 22,
               ),
             ),
@@ -258,13 +261,43 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Alerts',
-                    style: TextStyle(
-                      color: AppColors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
+                  Row(
+                    children: [
+                      const Text(
+                        'Alerts',
+                        style: TextStyle(
+                          color: AppColors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      if (criticalCount > 0) ...[
+                        const SizedBox(width: 8),
+                        AnimatedBuilder(
+                          animation: _pulseController,
+                          builder: (context, _) {
+                            final opacity =
+                                0.4 + (_pulseController.value * 0.6);
+                            return Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: criticalColor.withOpacity(opacity),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color:
+                                        criticalColor.withOpacity(opacity * 0.6),
+                                    blurRadius: 6,
+                                    spreadRadius: 1,
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ],
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -272,8 +305,14 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                         ? 'มี ${_alerts.length} การแจ้งเตือน'
                             '${criticalCount > 0 ? ' ($criticalCount วิกฤต)' : ''}'
                         : 'ไม่มีการแจ้งเตือน',
-                    style: const TextStyle(
-                        color: AppColors.neutral, fontSize: 13),
+                    style: TextStyle(
+                      color: criticalCount > 0
+                          ? criticalColor
+                          : AppColors.neutral,
+                      fontSize: 13,
+                      fontWeight:
+                          criticalCount > 0 ? FontWeight.w600 : FontWeight.normal,
+                    ),
                   ),
                 ],
               ),

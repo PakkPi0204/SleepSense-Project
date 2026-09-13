@@ -193,14 +193,74 @@ void collectAndSendData() {
 }
 
 // ─────────────────────────────────────────────
-// KY-037: อ่านค่า analog แล้วแปลงเป็นค่าประมาณ dB
-// (KY-037 ไม่ได้ให้ค่า dB จริงตรงๆ การ map นี้เป็นค่าประมาณสำหรับ prototype)
+// KY-037: อ่านค่าระดับเสียงแล้วแปลงเป็น dB โดยประมาณ
+//
+// ปัญหาของวิธีเดิม:
+//  1) analogRead() ครั้งเดียวอ่านแค่ 1 sample ของสัญญาณเสียงที่เป็น AC
+//     waveform (แกว่งขึ้นลงรอบจุดกึ่งกลาง ~Vcc/2) ค่าที่ได้จึงแทบเป็น
+//     สุ่ม ไม่ได้สะท้อน "ความดัง" ของเสียง ณ ขณะนั้นจริงๆ
+//  2) หน่วย dB เป็น log scale เทียบกับความดันเสียง แต่ map() เดิม
+//     เป็นการแปลงเชิงเส้น (linear) ตรงๆ จากค่า ADC ไป dB ซึ่งไม่มี
+//     ความสัมพันธ์ทางฟิสิกส์รองรับ ทำให้ค่าไม่แม่นยำ
+//
+// วิธีใหม่:
+//  1) สุ่มตัวอย่างสัญญาณหลายจุดในช่วงสั้นๆ แล้วหา amplitude โดยประมาณ
+//     จาก (max - min) / 2 ของ ADC ในช่วงนั้น (แทนการอ่านค่าเดียว)
+//  2) แปลง amplitude -> dB ด้วยสูตร log: dB = A*log10(amplitude) + B
+//     โดย A, B คำนวณจาก "จุด calibration" 2 จุดที่วัดจริงหน้างาน
+//     (เทียบกับเครื่องวัดระดับเสียง หรือแอปวัด dB บนมือถือ)
+//  3) ทำ EMA smoothing ระหว่างรอบ กันค่ากระโดดเพราะเสียงเปลี่ยนเร็ว
+//
+// *** ต้อง Calibrate ก่อนใช้งานจริง ***
+// ขั้นตอน: 1) วัดในห้องเงียบ จด amplitude ที่ได้ (พิมพ์ debug ผ่าน Serial)
+//          เทียบกับค่า dB จริงจากแอป/เครื่องวัด -> ใส่ใน NOISE_CAL_*_LOW
+//          2) เปิดเสียง (พูดคุย/เพลงเบาๆ) วัดซ้ำแล้วใส่ใน NOISE_CAL_*_HIGH
+//          ยิ่งจุด calibration ห่างกันมาก (เช่น 30dB กับ 70dB) ยิ่งแม่นยำ
+//          ในช่วงนั้น ค่านอกช่วงจะเป็นการประมาณนอกกรอบ (extrapolation)
 // ─────────────────────────────────────────────
+const int   NOISE_SAMPLE_COUNT   = 200;   // จำนวน sample ต่อการวัด 1 ครั้ง
+const float NOISE_CAL_DB_LOW     = 30.0f; // dB จริงที่วัดได้ตอน "เงียบ" (ต้อง calibrate)
+const float NOISE_CAL_AMP_LOW    = 15.0f; // amplitude (ADC counts) ที่วัดได้ตอนเงียบ
+const float NOISE_CAL_DB_HIGH    = 70.0f; // dB จริงที่วัดได้ตอน "มีเสียง" (ต้อง calibrate)
+const float NOISE_CAL_AMP_HIGH   = 300.0f;// amplitude (ADC counts) ที่วัดได้ตอนมีเสียง
+const float NOISE_EMA_ALPHA      = 0.3f;  // น้ำหนักค่าล่าสุดใน EMA (0-1) ยิ่งน้อยยิ่งนิ่งขึ้นแต่ตอบสนองช้าลง
+
+float noiseEmaDb = -1.0f;  // เก็บสถานะ EMA ข้ามรอบ (reset ทุกครั้งที่ ESP32 บูตใหม่)
+
 float readNoiseLevel() {
-  int raw = analogRead(SOUND_PIN);   // 0–4095 บน ESP32 (12-bit ADC)
-  // Map ค่า raw analog (0-4095) ไปเป็นช่วง dB โดยประมาณ (30-90 dB)
-  float db = map(raw, 0, 4095, 30, 90);
-  return db;
+  // 1) สุ่มตัวอย่างสัญญาณ AC จากไมค์ในช่วงสั้นๆ หา min/max เพื่อประมาณ amplitude
+  int minVal = 4095;
+  int maxVal = 0;
+  for (int i = 0; i < NOISE_SAMPLE_COUNT; i++) {
+    int v = analogRead(SOUND_PIN);
+    if (v < minVal) minVal = v;
+    if (v > maxVal) maxVal = v;
+    delayMicroseconds(100); // เว้นจังหวะเล็กน้อยให้ครอบคลุมหลายไซเคิลของย่านเสียงพูด
+  }
+  float amplitude = (maxVal - minVal) / 2.0f;
+  if (amplitude < 1.0f) amplitude = 1.0f; // กัน log10(0) และค่าติดลบ
+
+  // 2) แปลง amplitude -> dB ด้วยสูตร log แบบ 2-point calibration
+  //    dB = A * log10(amplitude) + B
+  static const float logLow  = log10(NOISE_CAL_AMP_LOW);
+  static const float logHigh = log10(NOISE_CAL_AMP_HIGH);
+  static const float calA = (NOISE_CAL_DB_HIGH - NOISE_CAL_DB_LOW) / (logHigh - logLow);
+  static const float calB = NOISE_CAL_DB_LOW - calA * logLow;
+
+  float db = calA * log10(amplitude) + calB;
+
+  // กันค่าหลุดขอบเขตที่เป็นไปได้จริงของไมค์รุ่นนี้
+  if (db < 25.0f) db = 25.0f;
+  if (db > 100.0f) db = 100.0f;
+
+  // 3) EMA smoothing ข้ามรอบการวัด กันค่ากระโดดเพราะเสียงเปลี่ยนแปลงเร็วมาก
+  if (noiseEmaDb < 0) {
+    noiseEmaDb = db; // ค่าแรกหลัง boot ใช้ค่าที่วัดได้ตรงๆ
+  } else {
+    noiseEmaDb = NOISE_EMA_ALPHA * db + (1.0f - NOISE_EMA_ALPHA) * noiseEmaDb;
+  }
+
+  return noiseEmaDb;
 }
 
 // ─────────────────────────────────────────────

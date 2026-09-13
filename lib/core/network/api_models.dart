@@ -52,6 +52,7 @@ class AlertDto {
   final String message;
   final double value;
   final double threshold;
+  final DateTime? timestamp;
 
   const AlertDto({
     required this.id,
@@ -61,7 +62,10 @@ class AlertDto {
     required this.message,
     required this.value,
     required this.threshold,
+    this.timestamp,
   });
+
+  bool get isCritical => level == 'CRITICAL';
 
   factory AlertDto.fromJson(Map<String, dynamic> json) {
     return AlertDto(
@@ -72,6 +76,7 @@ class AlertDto {
       message: (json['message'] ?? '') as String,
       value: _toDouble(json['value']),
       threshold: _toDouble(json['threshold']),
+      timestamp: DateTime.tryParse((json['timestamp'] ?? '').toString()),
     );
   }
 }
