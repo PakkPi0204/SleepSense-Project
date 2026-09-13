@@ -131,12 +131,19 @@ class _ThresholdSettingsScreenState extends State<ThresholdSettingsScreen> {
       backgroundColor: AppColors.primary,
       appBar: AppBar(
         backgroundColor: AppColors.primary,
+        foregroundColor: AppColors.white,
         elevation: 0,
-        title: const Text('ปรับค่าการแจ้งเตือน',
-            style: TextStyle(color: AppColors.white, fontSize: 18)),
-        iconTheme: const IconThemeData(color: AppColors.white),
+        title: const Text('ปรับค่าการแจ้งเตือน'),
       ),
-      body: SafeArea(child: _buildBody()),
+      // Center + ConstrainedBox(430) คือ layout wrapper ที่ทุกหน้าในแอปใช้
+      // เหมือนกันหมด (Dashboard, Stats, Sleep, Settings, Alerts) — เดิมหน้านี้
+      // ไม่มี เลยยืดเต็มจอบนจอกว้าง (tablet/web) ไม่เหมือนหน้าอื่น
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 430),
+          child: SafeArea(bottom: false, child: _buildBody()),
+        ),
+      ),
     );
   }
 
@@ -167,10 +174,22 @@ class _ThresholdSettingsScreenState extends State<ThresholdSettingsScreen> {
     }
 
     final s = _settings!;
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
-      children: [
-        _headerBanner(s.customized),
+    // RefreshIndicator + subtitle บนสุด + bottom padding 150 คือ pattern
+    // เดียวกับหน้า Alerts/Dashboard — ให้ pull-to-refresh ใช้ได้เหมือนกันทั้งแอป
+    return RefreshIndicator(
+      onRefresh: _load,
+      color: AppColors.secondary,
+      backgroundColor: AppColors.card,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 150),
+        children: [
+          const Text(
+            'ปรับความไวของการแจ้งเตือนให้เข้ากับตัวเอง',
+            style: TextStyle(color: AppColors.neutral, fontSize: 14),
+          ),
+          const SizedBox(height: 20),
+          _headerBanner(s.customized),
         const SizedBox(height: 20),
         _factorCard(
           title: 'อุณหภูมิ (Temperature)',
@@ -344,7 +363,8 @@ class _ThresholdSettingsScreenState extends State<ThresholdSettingsScreen> {
                 style: TextStyle(color: AppColors.neutral, fontSize: 13)),
           ),
         ),
-      ],
+        ],
+      ),
     );
   }
 
