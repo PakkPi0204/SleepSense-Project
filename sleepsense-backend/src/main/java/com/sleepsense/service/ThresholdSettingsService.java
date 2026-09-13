@@ -1,12 +1,20 @@
 package com.sleepsense.service;
 
+import com.sleepsense.analysis.ThresholdAnalyzer;
 import com.sleepsense.config.ThresholdConfig;
+import com.sleepsense.model.Alert;
+import com.sleepsense.model.SensorData;
 import com.sleepsense.model.ThresholdSettings;
+import com.sleepsense.repository.AlertRepository;
+import com.sleepsense.repository.SensorDataRepository;
 import com.sleepsense.repository.ThresholdSettingsRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -20,6 +28,12 @@ public class ThresholdSettingsService {
 
     private final ThresholdSettingsRepository repo;
     private final ThresholdConfig defaults;
+    private final SensorDataRepository sensorRepo;
+    private final AlertRepository alertRepo;
+    private final ThresholdAnalyzer analyzer;
+
+    /** กันสร้าง alert ซ้ำถ้าผู้ใช้กด save ติดกันหลายครั้งในช่วงสั้นๆ */
+    private static final long DEDUPE_WINDOW_SECONDS = 15;
 
     /** ค่า threshold ที่ "ใช้งานจริง" ของ device นี้ — custom ถ้ามี ไม่งั้นใช้ default */
     public ThresholdConfig getEffective(String deviceId) {
@@ -42,7 +56,49 @@ public class ThresholdSettingsService {
             log.error("Failed to save threshold settings for {}", deviceId, e);
             throw new RuntimeException("Database error", e);
         }
-        return getSettingsOrDefault(deviceId);
+        ThresholdSettings saved = getSettingsOrDefault(deviceId);
+
+        // เดิม: alert จะถูกสร้างเฉพาะตอน ESP32 ส่งข้อมูลใหม่เข้ามาเท่านั้น (ดู
+        // SensorService.ingest()) แปลว่าถ้าผู้ใช้ปรับ threshold ให้เข้มขึ้นแล้ว
+        // ค่าปัจจุบันในห้องเข้าเกณฑ์วิกฤตพอดี จะไม่มี alert/popup ใดๆ จนกว่า
+        // sensor รอบถัดไปจะส่งเข้ามา (อาจอีก 30+ วิ) — เช็คค่าล่าสุดที่มีอยู่แล้ว
+        // ทันทีตรงนี้ เพื่อให้การปรับ threshold รู้สึก "real time" จริงๆ
+        reEvaluateLatestReading(deviceId, merge(saved));
+
+        return saved;
+    }
+
+    /**
+     * เช็คค่า sensor ล่าสุดที่มีอยู่ในระบบกับ threshold ใหม่ทันทีหลัง save —
+     * ถ้าเข้าเกณฑ์ warning/critical จะสร้าง alert ใหม่เลย ไม่ต้องรอรอบถัดไปของ
+     * ESP32 ความล้มเหลวตรงนี้ไม่ควรทำให้การบันทึก threshold ล้มเหลวไปด้วย
+     */
+    private void reEvaluateLatestReading(String deviceId, ThresholdConfig effective) {
+        try {
+            Optional<SensorData> latest = sensorRepo.findLatest(deviceId);
+            if (latest.isEmpty()) return;
+
+            List<Alert> newAlerts = analyzer.analyze(latest.get(), effective);
+            if (newAlerts.isEmpty()) return;
+
+            List<Alert> recent = alertRepo.findRecentByDevice(deviceId, 20);
+            Instant cutoff = Instant.now().minus(DEDUPE_WINDOW_SECONDS, ChronoUnit.SECONDS);
+
+            for (Alert alert : newAlerts) {
+                boolean duplicate = recent.stream().anyMatch(r ->
+                        r.getFactor().equals(alert.getFactor())
+                                && r.getLevel() == alert.getLevel()
+                                && r.getTimestamp().isAfter(cutoff));
+                if (duplicate) continue;
+
+                alertRepo.save(alert);
+                log.info("Re-evaluated alert after threshold change [{}]: {} - {}",
+                        deviceId, alert.getLevel(), alert.getMessage());
+            }
+        } catch (Exception e) {
+            log.error("Failed to re-evaluate latest reading after threshold change for {}",
+                    deviceId, e);
+        }
     }
 
     /** รีเซ็ตกลับไปใช้ค่า default ของระบบ */

@@ -5,6 +5,10 @@ import '../../features/dashboard/models/dashboard_models.dart';
 
 /// แปลงข้อมูลจาก backend (DTO) → UI models ที่หน้าจอใช้อยู่แล้ว
 /// รวมตรรกะการ format ค่า + จัดสถานะ (Optimal/Warning ฯลฯ) ไว้ที่เดียว
+///
+/// หมายเหตุ: ทุกฟังก์ชันที่ต้องตัดสิน Warning/Critical รับ [ThresholdSettingsDto?]
+/// เข้ามาด้วยเสมอ ถ้าไม่ส่งมา (หรือ field เป็น null) จะ fallback เป็นค่า default
+/// เดิมของระบบ — ค่า default พวกนี้ต้องตรงกับ ThresholdConfig.java ฝั่ง backend
 class DashboardMapper {
   /// เช็คว่าข้อมูล sensor เก่าเกินไปไหม (ESP32 อาจหยุดส่ง/ออฟไลน์)
   /// ESP32 ส่งทุก 30 วิ — ถ้าเกิน 2 นาทีถือว่าน่าจะออฟไลน์
@@ -21,56 +25,96 @@ class DashboardMapper {
   DashboardMapper._();
 
   /// SensorDataDto → list ของ SensorReading (6 การ์ด)
-  static List<SensorReading> toSensorReadings(SensorDataDto d) {
+  /// [thresholds] คือค่าที่ผู้ใช้ปรับเอง (หรือ default จาก backend) — ใช้ตัดสิน
+  /// สถานะ Optimal/Warning/Critical ของแต่ละค่า
+  static List<SensorReading> toSensorReadings(
+    SensorDataDto d, {
+    ThresholdSettingsDto? thresholds,
+  }) {
+    final tempMin = thresholds?.temperatureMin ?? 18;
+    final tempMax = thresholds?.temperatureMax ?? 26;
+    final tempCriticalMin = thresholds?.temperatureCriticalMin ?? 15;
+    final tempCriticalMax = thresholds?.temperatureCriticalMax ?? 32;
+
+    final humidityMin = thresholds?.humidityMin ?? 30;
+    final humidityMax = thresholds?.humidityMax ?? 60;
+    final humidityCriticalMin = thresholds?.humidityCriticalMin ?? 20;
+    final humidityCriticalMax = thresholds?.humidityCriticalMax ?? 70;
+
+    final co2Warning = thresholds?.co2Warning ?? 1000;
+    final co2Critical = thresholds?.co2Critical ?? 2000;
+
+    final pm25Warning = thresholds?.pm25Warning ?? 35;
+    final pm25Critical = thresholds?.pm25Critical ?? 75;
+
+    final lightWarning = thresholds?.lightMax ?? 50;
+    final lightCritical = thresholds?.lightCritical ?? 200;
+
+    final noiseWarning = thresholds?.noiseWarning ?? 40;
+    final noiseCritical = thresholds?.noiseCritical ?? 60;
+
     return [
       SensorReading(
         icon: Icons.thermostat_outlined,
         title: 'Temperature',
         value: d.temperature < 0 ? 'N/A' : '${_fmt(d.temperature)}°C',
-        status: d.temperature < 0 ? 'No sensor' : _tempStatus(d.temperature),
-        level: d.temperature < 0 ? SensorLevel.normal : _tempLevel(d.temperature),
+        status: d.temperature < 0
+            ? 'No sensor'
+            : _tempStatus(d.temperature, tempMin, tempMax, tempCriticalMin,
+                tempCriticalMax),
+        level: d.temperature < 0
+            ? SensorLevel.normal
+            : _rangeLevel(d.temperature, tempMin, tempMax,
+                criticalMin: tempCriticalMin, criticalMax: tempCriticalMax),
       ),
       SensorReading(
         icon: Icons.water_drop_outlined,
         title: 'Humidity',
         value: d.humidity < 0 ? 'N/A' : '${_fmt(d.humidity)}%',
-        status: d.humidity < 0 ? 'No sensor' : _rangeStatus(d.humidity, 30, 60),
+        status: d.humidity < 0
+            ? 'No sensor'
+            : _rangeStatus(d.humidity, humidityMin, humidityMax),
         level: d.humidity < 0
             ? SensorLevel.normal
-            : _rangeLevel(d.humidity, 30, 60,
-                criticalMin: 20, criticalMax: 70),
+            : _rangeLevel(d.humidity, humidityMin, humidityMax,
+                criticalMin: humidityCriticalMin,
+                criticalMax: humidityCriticalMax),
       ),
       SensorReading(
         icon: Icons.air,
         title: 'CO₂',
         value: d.co2 <= 0 ? 'N/A' : '${d.co2.round()} ppm',
-        status: d.co2 <= 0 ? 'No sensor' : _co2Status(d.co2),
-        level: d.co2 <= 0 ? SensorLevel.normal : _co2Level(d.co2),
+        status: d.co2 <= 0
+            ? 'No sensor'
+            : _thresholdStatus(d.co2, co2Warning, co2Critical),
+        level: d.co2 <= 0
+            ? SensorLevel.normal
+            : _thresholdLevel(d.co2, co2Warning, co2Critical),
       ),
       SensorReading(
         icon: Icons.speed_outlined,
         title: 'PM2.5',
         value: '${_fmt(d.pm25)} μg/m³',
-        status: _pm25Status(d.pm25),
-        level: _pm25Level(d.pm25),
+        status: _pm25Status(d.pm25, pm25Warning, pm25Critical),
+        level: _thresholdLevel(d.pm25, pm25Warning, pm25Critical),
       ),
       SensorReading(
         icon: Icons.wb_sunny_outlined,
         title: 'Light',
         value: '${d.lightIntensity.round()} lux',
-        status: d.lightIntensity > 200
+        status: d.lightIntensity > lightCritical
             ? 'Critical'
-            : d.lightIntensity > 50
+            : d.lightIntensity > lightWarning
                 ? 'Bright'
                 : 'Optimal',
-        level: _lightLevel(d.lightIntensity),
+        level: _thresholdLevel(d.lightIntensity, lightWarning, lightCritical),
       ),
       SensorReading(
         icon: Icons.volume_up_outlined,
         title: 'Sound',
         value: '${d.noiseLevel.round()} dB',
-        status: _noiseStatus(d.noiseLevel),
-        level: _noiseLevel(d.noiseLevel),
+        status: _noiseStatus(d.noiseLevel, noiseWarning, noiseCritical),
+        level: _thresholdLevel(d.noiseLevel, noiseWarning, noiseCritical),
       ),
       SensorReading(
         icon: Icons.directions_walk,
@@ -83,13 +127,8 @@ class DashboardMapper {
   }
 
   // ── ระดับความรุนแรงตาม threshold (สำหรับเลือกสี) ──
-  // ค่าเหล่านี้ต้องตรงกับ ThresholdConfig.java ฝั่ง backend เสมอ
-  static SensorLevel _tempLevel(double t) {
-    if (t < 15 || t > 32) return SensorLevel.critical;
-    if (t < 18 || t > 26) return SensorLevel.warning;
-    return SensorLevel.normal;
-  }
-
+  // รับช่วง min/max (+ critical min/max ถ้ามี) มาจาก ThresholdSettingsDto แทน
+  // การ hardcode ค่าคงที่ไว้ในฟังก์ชัน
   static SensorLevel _rangeLevel(double v, double min, double max,
       {double? criticalMin, double? criticalMax}) {
     if (criticalMin != null && v < criticalMin) return SensorLevel.critical;
@@ -98,47 +137,64 @@ class DashboardMapper {
     return SensorLevel.normal;
   }
 
-  static SensorLevel _co2Level(double c) {
-    if (c >= 2000) return SensorLevel.critical;
-    if (c >= 1000) return SensorLevel.warning;
+  /// ใช้กับค่าที่ยิ่งสูงยิ่งแย่ทางเดียว (CO2 / PM2.5 / Light / Noise)
+  static SensorLevel _thresholdLevel(
+      double v, double warning, double critical) {
+    if (v >= critical) return SensorLevel.critical;
+    if (v >= warning) return SensorLevel.warning;
     return SensorLevel.normal;
   }
 
-  static SensorLevel _pm25Level(double p) {
-    if (p >= 75) return SensorLevel.critical;
-    if (p >= 35) return SensorLevel.warning;
-    return SensorLevel.normal;
-  }
+  /// คำนวณ environment score จากค่า sensor (0-100) โดยอิงตาม threshold ของผู้ใช้
+  static EnvironmentScore toEnvironmentScore(
+    SensorDataDto d, {
+    ThresholdSettingsDto? thresholds,
+  }) {
+    final tempMin = thresholds?.temperatureMin ?? 18;
+    final tempMax = thresholds?.temperatureMax ?? 26;
+    final tempCriticalMin = thresholds?.temperatureCriticalMin ?? 15;
+    final tempCriticalMax = thresholds?.temperatureCriticalMax ?? 32;
 
-  static SensorLevel _noiseLevel(double n) {
-    if (n >= 60) return SensorLevel.critical;
-    if (n >= 40) return SensorLevel.warning;
-    return SensorLevel.normal;
-  }
+    final humidityMin = thresholds?.humidityMin ?? 30;
+    final humidityMax = thresholds?.humidityMax ?? 60;
+    final humidityCriticalMin = thresholds?.humidityCriticalMin ?? 20;
+    final humidityCriticalMax = thresholds?.humidityCriticalMax ?? 70;
 
-  static SensorLevel _lightLevel(double lux) {
-    if (lux > 200) return SensorLevel.critical;
-    if (lux > 50) return SensorLevel.warning;
-    return SensorLevel.normal;
-  }
+    final co2Warning = thresholds?.co2Warning ?? 1000;
+    final co2Critical = thresholds?.co2Critical ?? 2000;
 
-  /// คำนวณ environment score จากค่า sensor (0-100)
-  static EnvironmentScore toEnvironmentScore(SensorDataDto d) {
+    final pm25Warning = thresholds?.pm25Warning ?? 35;
+    final pm25Critical = thresholds?.pm25Critical ?? 75;
+
+    final lightWarning = thresholds?.lightMax ?? 50;
+    final lightCritical = thresholds?.lightCritical ?? 200;
+
+    final noiseWarning = thresholds?.noiseWarning ?? 40;
+    final noiseCritical = thresholds?.noiseCritical ?? 60;
+
     int score = 100;
     if (d.co2 > 0) {
-      if (d.co2 > 1000) score -= 20;
-      if (d.co2 > 2000) score -= 20; // รวม -40 เมื่อวิกฤต
+      if (d.co2 > co2Warning) score -= 20;
+      if (d.co2 > co2Critical) score -= 20; // รวม -40 เมื่อวิกฤต
     }
-    if (d.temperature < 18 || d.temperature > 26) score -= 15;
-    if (d.temperature < 15 || d.temperature > 32) score -= 15; // รวม -30 เมื่อวิกฤต
-    if (d.humidity > 0 && (d.humidity < 30 || d.humidity > 60)) score -= 10;
-    if (d.humidity > 0 && (d.humidity < 20 || d.humidity > 70)) score -= 10;
-    if (d.pm25 > 35) score -= 15;
-    if (d.pm25 > 75) score -= 15; // รวม -30 เมื่อวิกฤต
-    if (d.noiseLevel > 40) score -= 10;
-    if (d.noiseLevel > 60) score -= 10; // รวม -20 เมื่อวิกฤต
-    if (d.lightIntensity > 50) score -= 10;
-    if (d.lightIntensity > 200) score -= 10; // รวม -20 เมื่อวิกฤต
+    if (d.temperature < tempMin || d.temperature > tempMax) score -= 15;
+    if (d.temperature < tempCriticalMin || d.temperature > tempCriticalMax) {
+      score -= 15; // รวม -30 เมื่อวิกฤต
+    }
+    if (d.humidity > 0 && (d.humidity < humidityMin || d.humidity > humidityMax)) {
+      score -= 10;
+    }
+    if (d.humidity > 0 &&
+        (d.humidity < humidityCriticalMin ||
+            d.humidity > humidityCriticalMax)) {
+      score -= 10; // รวม -20 เมื่อวิกฤต
+    }
+    if (d.pm25 > pm25Warning) score -= 15;
+    if (d.pm25 > pm25Critical) score -= 15; // รวม -30 เมื่อวิกฤต
+    if (d.noiseLevel > noiseWarning) score -= 10;
+    if (d.noiseLevel > noiseCritical) score -= 10; // รวม -20 เมื่อวิกฤต
+    if (d.lightIntensity > lightWarning) score -= 10;
+    if (d.lightIntensity > lightCritical) score -= 10; // รวม -20 เมื่อวิกฤต
     if (score < 0) score = 0;
 
     final status = score >= 80
@@ -183,10 +239,16 @@ class DashboardMapper {
   // ── format & status helpers ──
   static String _fmt(double v) => v.toStringAsFixed(1);
 
-  static String _tempStatus(double t) {
-    if (t < 15 || t > 32) return 'Critical';
-    if (t >= 20 && t <= 24) return 'Optimal';
-    if (t >= 18 && t <= 26) return 'Good';
+  static String _tempStatus(double t, double min, double max,
+      double criticalMin, double criticalMax) {
+    if (t < criticalMin || t > criticalMax) return 'Critical';
+    // "Optimal" คือช่วงกลางของ comfort range (ให้ผลใกล้เคียงของเดิมที่เคย
+    // hardcode 20-24 ไว้ แต่ปรับตามช่วงที่ผู้ใช้ตั้งจริง)
+    final mid = (min + max) / 2;
+    final tightLo = mid - (max - min) / 6;
+    final tightHi = mid + (max - min) / 6;
+    if (t >= tightLo && t <= tightHi) return 'Optimal';
+    if (t >= min && t <= max) return 'Good';
     return 'Warning';
   }
 
@@ -195,21 +257,22 @@ class DashboardMapper {
     return 'Warning';
   }
 
-  static String _co2Status(double c) {
-    if (c < 1000) return 'Optimal';
-    if (c < 2000) return 'Warning';
+  /// ใช้กับค่าที่ยิ่งสูงยิ่งแย่ทางเดียว (CO2) — คืนข้อความสถานะ
+  static String _thresholdStatus(double v, double warning, double critical) {
+    if (v < warning) return 'Optimal';
+    if (v < critical) return 'Warning';
     return 'Critical';
   }
 
-  static String _pm25Status(double p) {
-    if (p < 35) return 'Good';
-    if (p < 75) return 'Warning';
+  static String _pm25Status(double p, double warning, double critical) {
+    if (p < warning) return 'Good';
+    if (p < critical) return 'Warning';
     return 'Critical';
   }
 
-  static String _noiseStatus(double n) {
-    if (n < 40) return 'Quiet';
-    if (n < 60) return 'Warning';
+  static String _noiseStatus(double n, double warning, double critical) {
+    if (n < warning) return 'Quiet';
+    if (n < critical) return 'Warning';
     return 'Loud';
   }
 }

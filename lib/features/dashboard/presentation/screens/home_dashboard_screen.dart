@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/network/api_config.dart';
 import '../../../../core/network/api_service.dart';
 import '../../../../core/network/api_models.dart';
 import '../../../../core/network/dashboard_mapper.dart';
@@ -77,42 +78,75 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
       });
     }
 
+    // ยิงแต่ละ endpoint แยกกัน (ไม่ใช้ Future.wait ตรงๆ) — เดิมถ้า endpoint
+    // ไหน endpoint หนึ่ง throw (เช่น เน็ตสะดุดตอนดึง alerts พอดี) จะทำให้ทั้งชุด
+    // ไม่ถูกอัปเดตเลยแม้ endpoint อื่นจะสำเร็จ รวมถึง sensor/threshold ด้วย —
+    // นี่คือสาเหตุที่ dashboard ค้างค่า/threshold เก่า และดูเหมือนต้องปิดเปิด
+    // แอปใหม่ถึงจะ "บังเอิญ" เจอรอบที่ทุก endpoint สำเร็จพร้อมกันพอดี ตอนนี้
+    // แยกยิงเพื่อให้ endpoint ที่สำเร็จอัปเดตผลได้เสมอ ไม่ขึ้นกับ endpoint อื่น
+    // เริ่มยิงทั้ง 5 ตัวพร้อมกัน (ไม่ await ทีละตัว ไม่งั้นจะกลายเป็นยิงเรียง
+    // ต่อกันทีละ endpoint ช้าลง 5 เท่า) แล้วค่อย await ผลลัพธ์แต่ละตัวทีหลัง
+    final sensorFuture = _safeCall(() => _api.fetchLatestSensor());
+    final thresholdsFuture =
+        _safeCall(() => _api.fetchThresholds(deviceId: ApiConfig.deviceId));
+    final suggestionsFuture = _safeCall(() => _api.fetchPreSleepSuggestions());
+    final reportFuture = _safeCall(() => _api.fetchLatestReport());
+    final alertsFuture = _safeCall(() => _api.fetchRecentAlerts(limit: 5));
+
+    final sensorResult = await sensorFuture;
+    final thresholdsResult = await thresholdsFuture;
+    final suggestionsResult = await suggestionsFuture;
+    final reportResult = await reportFuture;
+    final alertsResult = await alertsFuture;
+
+    if (!mounted) return;
+
+    final allFailed = sensorResult.error != null &&
+        thresholdsResult.error != null &&
+        suggestionsResult.error != null &&
+        reportResult.error != null &&
+        alertsResult.error != null;
+
+    setState(() {
+      final sensor = sensorResult.value;
+      if (sensor != null) {
+        // thresholds อาจเป็น null ถ้า endpoint นี้พังพอดีรอบนี้ — mapper จะ
+        // fallback ไปใช้ค่า default เอง ไม่ทำให้ sensor reading หายไปด้วย
+        _readings = DashboardMapper.toSensorReadings(sensor,
+            thresholds: thresholdsResult.value);
+        _score = DashboardMapper.toEnvironmentScore(sensor,
+            thresholds: thresholdsResult.value);
+        _deviceOffline = DashboardMapper.isStale(sensor.timestamp);
+      }
+      if (suggestionsResult.value != null) {
+        _suggestion = DashboardMapper.toPreSleepSuggestion(suggestionsResult.value!);
+      }
+      if (reportResult.value != null) {
+        _report = DashboardMapper.toMorningReport(reportResult.value!);
+      }
+      if (alertsResult.value != null) {
+        _alerts = alertsResult.value!;
+      }
+      // โชว์ error banner ก็ต่อเมื่อทุก endpoint พังพร้อมกัน (backend ล่ม/ไม่ได้
+      // เชื่อมต่อจริงๆ) ถ้ามีอย่างน้อย 1 endpoint สำเร็จ ถือว่าอัปเดตได้ปกติ
+      _error = allFailed
+          ? (sensorResult.error ?? thresholdsResult.error ?? 'เชื่อมต่อ backend ไม่ได้')
+          : null;
+      _loading = false;
+    });
+
+    // เช็ค critical alert ใหม่ แล้วเด้ง popup (ข้ามรอบแรกที่เพิ่งเปิดแอป)
+    if (alertsResult.value != null) {
+      _checkNewCriticalAlerts(alertsResult.value!);
+    }
+  }
+
+  /// ห่อ future ทีละตัวไม่ให้ error ของ endpoint หนึ่งไปบล็อกผลของ endpoint อื่น
+  Future<_Result<T>> _safeCall<T>(Future<T> Function() call) async {
     try {
-      // ยิงพร้อมกันทั้ง 3 endpoint
-      final results = await Future.wait([
-        _api.fetchLatestSensor(),
-        _api.fetchPreSleepSuggestions(),
-        _api.fetchLatestReport(),
-        _api.fetchRecentAlerts(limit: 5),
-      ]);
-
-      final sensor = results[0] as dynamic;
-      final suggestions = results[1] as List<String>;
-      final report = results[2] as dynamic;
-      final alerts = results[3] as List<AlertDto>;
-
-      setState(() {
-        if (sensor != null) {
-          _readings = DashboardMapper.toSensorReadings(sensor);
-          _score = DashboardMapper.toEnvironmentScore(sensor);
-          _deviceOffline = DashboardMapper.isStale(sensor.timestamp);
-        }
-        _suggestion = DashboardMapper.toPreSleepSuggestion(suggestions);
-        if (report != null) {
-          _report = DashboardMapper.toMorningReport(report);
-        }
-        _alerts = alerts;
-        _loading = false;
-      });
-
-      // เช็ค critical alert ใหม่ แล้วเด้ง banner (ข้ามรอบแรกที่เพิ่งเปิดแอป)
-      _checkNewCriticalAlerts(alerts);
+      return _Result<T>(value: await call());
     } catch (e) {
-      // ต่อ backend ไม่ได้ → โชว์ sample data ต่อ + แจ้ง error เบาๆ
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
+      return _Result<T>(error: e.toString());
     }
   }
 
@@ -380,4 +414,13 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
       ),
     );
   }
+}
+
+/// ผลลัพธ์ของการยิง endpoint หนึ่งตัวแบบ isolated — ใส่ error ไว้แยกจาก value
+/// เพื่อไม่ให้ endpoint หนึ่งพังแล้วดึงอีก endpoint ที่สำเร็จตกไปด้วย
+class _Result<T> {
+  final T? value;
+  final String? error;
+
+  _Result({this.value, this.error});
 }
