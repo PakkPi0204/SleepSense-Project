@@ -1,5 +1,6 @@
 package com.sleepsense.analysis;
 
+import com.sleepsense.config.ThresholdConfig;
 import com.sleepsense.model.MorningReport;
 import com.sleepsense.model.SensorData;
 import org.springframework.stereotype.Component;
@@ -17,12 +18,26 @@ public class MorningReportGenerator {
 
     private final EnvironmentClusterer clusterer;
 
-    public MorningReportGenerator(EnvironmentClusterer clusterer) {
+    /** default config — ใช้เมื่อผู้เรียกไม่ได้ระบุ effective config มาให้ (เช่น เทส) */
+    private final ThresholdConfig defaultCfg;
+
+    public MorningReportGenerator(EnvironmentClusterer clusterer, ThresholdConfig defaultCfg) {
         this.clusterer = clusterer;
+        this.defaultCfg = defaultCfg;
     }
 
     public MorningReport generate(String deviceId, List<SensorData> data,
                                    Instant sleepStart, Instant sleepEnd) {
+        return generate(deviceId, data, sleepStart, sleepEnd, defaultCfg);
+    }
+
+    /**
+     * @param cfg threshold ที่ "ใช้งานจริง" ของ device นี้ (custom ถ้ามี ไม่งั้น default) —
+     *            ผู้เรียกควรดึงมาจาก ThresholdSettingsService.getEffective(deviceId) เสมอ
+     *            เพื่อให้ anomaly/suggestion sync กับค่าที่ผู้ใช้ปรับเอง
+     */
+    public MorningReport generate(String deviceId, List<SensorData> data,
+                                   Instant sleepStart, Instant sleepEnd, ThresholdConfig cfg) {
         if (data.isEmpty()) {
             return MorningReport.builder()
                     .deviceId(deviceId)
@@ -57,10 +72,10 @@ public class MorningReportGenerator {
         String cluster = clusterer.cluster(data);
 
         // ─── Anomalies ───
-        List<String> anomalies = detectAnomalies(avgTemp, maxCo2, maxPm25, maxNoise, motionPattern);
+        List<String> anomalies = detectAnomalies(avgTemp, maxCo2, maxPm25, maxNoise, motionPattern, cfg);
 
         // ─── Suggestions ───
-        List<String> suggestions = buildSuggestions(avgTemp, avgCo2, avgPm25, avgNoise, motionPattern, cluster);
+        List<String> suggestions = buildSuggestions(avgTemp, avgCo2, avgPm25, avgNoise, motionPattern, cluster, cfg);
 
         // ─── Data completeness ───
         // ESP32 ส่งทุก 30 วิ = 2 ครั้ง/นาที → คำนวณว่าเก็บได้กี่ % ของที่ควรได้
@@ -95,27 +110,33 @@ public class MorningReportGenerator {
     // ──────────────────────────────────────────────
     private List<String> detectAnomalies(double avgTemp, double maxCo2,
                                           double maxPm25, double maxNoise,
-                                          String motionPattern) {
+                                          String motionPattern, ThresholdConfig cfg) {
         List<String> anomalies = new ArrayList<>();
-        if (avgTemp > 26)  anomalies.add("อุณหภูมิเฉลี่ยสูงตลอดคืน (" + avgTemp + "°C)");
-        if (maxCo2 > 1000) anomalies.add("CO₂ สูงสุดเกินมาตรฐาน (" + (int)maxCo2 + " ppm)");
-        if (maxPm25 > 35)  anomalies.add("ฝุ่น PM2.5 สูงสุดเกินมาตรฐาน (" + maxPm25 + " µg/m³)");
-        if (maxNoise > 60) anomalies.add("มีเสียงรบกวนระดับสูง (" + (int)maxNoise + " dB)");
+        if (avgTemp > cfg.getTemperatureMax())
+            anomalies.add("อุณหภูมิเฉลี่ยสูงตลอดคืน (" + avgTemp + "°C)");
+        if (maxCo2 > cfg.getCo2Warning())
+            anomalies.add("CO₂ สูงสุดเกินมาตรฐาน (" + (int) maxCo2 + " ppm)");
+        if (maxPm25 > cfg.getPm25Warning())
+            anomalies.add("ฝุ่น PM2.5 สูงสุดเกินมาตรฐาน (" + maxPm25 + " µg/m³)");
+        if (maxNoise > cfg.getNoiseCritical())
+            anomalies.add("มีเสียงรบกวนระดับสูง (" + (int) maxNoise + " dB)");
         if ("HIGH".equals(motionPattern)) anomalies.add("ตรวจพบการเคลื่อนไหวบ่อยครั้งระหว่างนอน");
         return anomalies;
     }
 
     private List<String> buildSuggestions(double avgTemp, double avgCo2, double avgPm25,
-                                           double avgNoise, String motionPattern, String cluster) {
+                                           double avgNoise, String motionPattern, String cluster,
+                                           ThresholdConfig cfg) {
         List<String> s = new ArrayList<>();
 
-        if (avgTemp > 26)
-            s.add("ลองปรับอุณหภูมิแอร์ให้อยู่ที่ 20–24°C เพื่อการนอนที่สบายขึ้น");
-        if (avgCo2 > 1000)
+        if (avgTemp > cfg.getTemperatureMax())
+            s.add("ลองปรับอุณหภูมิแอร์ให้อยู่ที่ " + (int) cfg.getTemperatureMin()
+                    + "–" + (int) cfg.getTemperatureMax() + "°C เพื่อการนอนที่สบายขึ้น");
+        if (avgCo2 > cfg.getCo2Warning())
             s.add("เปิดหน้าต่างหรือปรับระบบระบายอากาศก่อนนอน เพื่อลด CO₂");
-        if (avgPm25 > 35)
+        if (avgPm25 > cfg.getPm25Warning())
             s.add("ใช้เครื่องฟอกอากาศในห้องนอนเพื่อลดฝุ่น PM2.5");
-        if (avgNoise > 40)
+        if (avgNoise > cfg.getNoiseWarning())
             s.add("ลดแหล่งเสียงรบกวนหรือใช้เครื่องเสียงสีขาว (white noise)");
         if ("HIGH".equals(motionPattern))
             s.add("การเคลื่อนไหวบ่อยอาจเกิดจากความไม่สบายตัว — ตรวจสอบอุณหภูมิและที่นอน");

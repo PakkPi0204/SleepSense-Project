@@ -4,6 +4,7 @@ import com.google.api.core.ApiFuture;
 import com.google.cloud.firestore.*;
 import com.google.firebase.cloud.FirestoreClient;
 import com.sleepsense.analysis.MorningReportGenerator;
+import com.sleepsense.config.ThresholdConfig;
 import com.sleepsense.model.MorningReport;
 import com.sleepsense.model.SensorData;
 import lombok.RequiredArgsConstructor;
@@ -23,13 +24,18 @@ public class MorningReportService {
 
     private final SensorService sensorService;
     private final MorningReportGenerator generator;
+    private final ThresholdSettingsService thresholdSettingsService;
 
     /**
      * สร้างและบันทึก morning report สำหรับช่วงเวลาที่ระบุ
+     * ใช้ threshold ที่ "ใช้งานจริง" ของ device นี้ (custom ถ้าผู้ใช้เคยตั้งเอง
+     * ไม่งั้น fallback ไป default) เพื่อให้ anomaly/suggestion ใน report sync
+     * กับค่าที่ผู้ใช้ปรับไว้ในหน้า threshold settings เสมอ
      */
     public MorningReport generate(String deviceId, Instant sleepStart, Instant sleepEnd) {
         List<SensorData> data = sensorService.getRange(deviceId, sleepStart, sleepEnd);
-        MorningReport report = generator.generate(deviceId, data, sleepStart, sleepEnd);
+        ThresholdConfig effective = thresholdSettingsService.getEffective(deviceId);
+        MorningReport report = generator.generate(deviceId, data, sleepStart, sleepEnd, effective);
 
         try {
             Firestore db = FirestoreClient.getFirestore();
