@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../network/api_models.dart';
+import '../../shared/utils/english_text.dart';
 import '../scoring/environment_scoring.dart';
 import '../../features/dashboard/models/dashboard_models.dart';
 
@@ -182,7 +183,7 @@ class DashboardMapper {
       );
     }
 
-    final raw = suggestions.first;
+    final raw = englishSuggestion(suggestions.first);
     final rule = _matchSuggestionRule(raw);
     return PreSleepSuggestion(
       icon: rule.icon,

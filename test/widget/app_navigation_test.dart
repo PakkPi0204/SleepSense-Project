@@ -78,16 +78,16 @@ void main() {
     await openApp(tester);
 
     expect(find.text('Home'), findsOneWidget);
-    expect(find.text('Patterns'), findsOneWidget);
+    expect(find.text('Stats'), findsOneWidget);
     expect(find.text('Sleep'), findsOneWidget);
     expect(find.text('Settings'), findsOneWidget);
   });
 
-  testWidgets('the Patterns tab shows the sleep pattern analysis, not reports',
+  testWidgets('the Stats tab shows the sleep pattern analysis, not reports',
       (tester) async {
     await openApp(tester);
 
-    await tester.tap(find.text('Patterns'));
+    await tester.tap(find.text('Stats'));
     await tester.pumpAndSettle();
 
     expect(find.text('Sleep Patterns'), findsOneWidget);

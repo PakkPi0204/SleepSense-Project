@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/network/api_service.dart';
 import '../../../../core/network/api_models.dart';
+import '../../../../shared/utils/english_text.dart';
 import '../../../../shared/utils/time_format.dart';
 
 const _criticalColor = Color(0xFFE85D5D);
@@ -257,7 +258,13 @@ class _AlertsScreenState extends State<AlertsScreen>
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  a.message,
+                  englishAlertMessage(
+                    message: a.message,
+                    level: a.level,
+                    factor: a.factor,
+                    value: a.value,
+                    threshold: a.threshold,
+                  ),
                   style: TextStyle(
                     color: AppColors.white,
                     fontSize: 14,

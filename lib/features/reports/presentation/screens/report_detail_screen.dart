@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/network/api_models.dart';
+import '../../../../shared/utils/english_text.dart';
 import '../../../../shared/utils/text_format.dart';
 
 /// Detail view of one night's Morning Report.
@@ -178,7 +179,7 @@ class ReportDetailScreen extends StatelessWidget {
                           fontWeight: FontWeight.w600)),
                   const SizedBox(height: 14),
                   ...report.anomalies.map((a) => _bullet(
-                      roundDecimalsInText(a),
+                      roundDecimalsInText(englishNotableEvent(a)),
                       AppColors.accent,
                       Icons.warning_amber_rounded)),
                 ],
@@ -193,7 +194,7 @@ class ReportDetailScreen extends StatelessWidget {
                           fontWeight: FontWeight.w600)),
                   const SizedBox(height: 14),
                   ...report.suggestions.map((s) => _bullet(
-                      roundDecimalsInText(s),
+                      roundDecimalsInText(englishSuggestion(s)),
                       AppColors.secondary,
                       Icons.lightbulb_outline)),
                 ],

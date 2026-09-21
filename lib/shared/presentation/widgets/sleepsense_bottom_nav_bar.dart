@@ -47,7 +47,7 @@ class SleepSenseBottomNavBar extends StatelessWidget {
           _BottomNavItem(
             tab: AppTab.patterns,
             icon: Icons.insights_rounded,
-            label: 'Patterns',
+            label: 'Stats',
             active: activeTab == AppTab.patterns,
             onTap: onTabSelected,
           ),
