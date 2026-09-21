@@ -28,8 +28,8 @@ public class SensorService {
     private final ThresholdSettingsService thresholdSettingsService;
 
     /**
-     * รับข้อมูลจาก ESP32 → บันทึก → วิเคราะห์ → สร้าง alert ถ้าเกิน threshold
-     * (ใช้ threshold ที่ device นี้ตั้งเองถ้ามี ไม่งั้น fallback ไปที่ค่า default)
+     * Receive a reading from the ESP32: store it, analyse it, and raise alerts
+     * for anything over threshold (custom thresholds if set, otherwise defaults).
      */
     public SensorData ingest(SensorDataRequest req) {
         SensorData data = SensorData.builder()
@@ -53,7 +53,7 @@ public class SensorService {
             throw new RuntimeException("Database error", e);
         }
 
-        // ดึง threshold ที่ device นี้ตั้งเอง (ถ้ามี) มาใช้วิเคราะห์แทนค่า default
+        // Analyse against this device's own thresholds when it has any.
         ThresholdConfig effective = thresholdSettingsService.getEffective(req.getDeviceId());
 
         List<Alert> alerts = analyzer.analyze(data, effective);
@@ -63,21 +63,21 @@ public class SensorService {
     }
 
     /**
-     * เดิมโค้ดตรงนี้แค่ insert แถว Alert ใหม่ทุกครั้งที่ analyze() เจอปัญหา —
-     * ทำให้ระหว่างที่ปัญหาเดิมยังต่อเนื่องอยู่ (เช่น อุณหภูมิสูงค้างอยู่หลาย
-     * นาที) จะมีแถวใหม่ถูกสร้างทุกๆ 30 วิ (ทุกรอบที่ ESP32 ส่งค่ามา) และไม่มี
-     * กลไกใดๆ บอกว่าปัญหาเดิม "หายไปแล้ว" เลย ทำให้ frontend ต้องคอยเดา/กรอง
-     * เองว่า alert แถวไหนยังจริงอยู่ (ดู DashboardMapper.isFactorCritical ฝั่ง
-     * Flutter ที่แก้เป็นการชั่วคราวไปก่อนหน้านี้)
+     * This used to insert a new Alert row every time analyze() found a problem,
+     * so an ongoing problem (a room that stays too warm for several minutes)
+     * produced a fresh row every 30 seconds, and nothing ever recorded that the
+     * problem had cleared. The frontend had to guess which rows were still true
+     * (see DashboardMapper.isFactorCritical on the Flutter side, which was a
+     * stopgap).
      *
-     * ตอนนี้ backend เป็นฝ่ายจัดการสถานะ resolved/active เองแล้ว:
-     *   1) factor ไหนที่เคย active อยู่ แต่รอบนี้ analyze() ไม่เจอปัญหาแล้ว
-     *      (ค่ากลับมาปกติ หรือผู้ใช้ปรับ threshold ใหม่จนไม่วิกฤตแล้ว) → resolve
-     *   2) factor ไหนที่ analyze() เจอปัญหาแต่ level เดิมกับที่ active อยู่แล้ว
-     *      (ยังเป็นปัญหาเดิมต่อเนื่อง) → ไม่ insert ซ้ำ กันสแปม DB
-     *   3) factor ไหนที่ level เปลี่ยนไป (เช่น WARNING ยกระดับเป็น CRITICAL)
-     *      หรือเป็นปัญหาใหม่ที่ไม่เคย active มาก่อน → resolve อันเก่า (ถ้ามี)
-     *      แล้ว insert แถวใหม่แทน
+     * The backend now owns the resolved/active state:
+     *   1) a factor that was active but is no longer flagged this round (value
+     *      back to normal, or thresholds widened) is resolved;
+     *   2) a factor still flagged at the same level as the active row is left
+     *      alone, so the collection is not spammed with duplicates;
+     *   3) a factor whose level changed (WARNING escalating to CRITICAL) or that
+     *      was not active before resolves the old row (if any) and inserts a new
+     *      one.
      */
     private void processAlerts(String deviceId, List<Alert> alerts) {
         List<Alert> activeAlerts;
@@ -85,8 +85,8 @@ public class SensorService {
             activeAlerts = alertRepo.findActiveByDevice(deviceId);
         } catch (Exception e) {
             log.error("Failed to fetch active alerts for device {}", deviceId, e);
-            // ดึง active list ไม่ได้ — ยอมให้ insert ตรงๆ แบบเดิมไปก่อน ดีกว่า
-            // ทำให้ alert วิกฤตรอบนี้หายไปเฉยๆ เพราะเช็ค dedupe ไม่ได้
+            // The active list is unavailable — insert directly as before. A
+            // duplicate beats silently losing this round's critical alert.
             alerts.forEach(alert -> {
                 try {
                     alertRepo.save(alert);
@@ -100,7 +100,7 @@ public class SensorService {
         Set<String> currentFactors = new HashSet<>();
         for (Alert a : alerts) currentFactors.add(a.getFactor());
 
-        // 1) resolve alert เก่าของ factor ที่ตอนนี้ไม่มีปัญหาแล้ว
+        // 1) Resolve alerts for factors that are no longer a problem.
         for (Alert active : activeAlerts) {
             if (!currentFactors.contains(active.getFactor())) {
                 try {
@@ -112,7 +112,7 @@ public class SensorService {
             }
         }
 
-        // 2)/3) สร้างแถวใหม่เฉพาะ factor ที่ยังไม่มี active alert ระดับเดิมอยู่
+        // 2)/3) Insert only for factors with no active alert at the same level.
         for (Alert alert : alerts) {
             Alert existingActive = activeAlerts.stream()
                     .filter(a -> a.getFactor().equals(alert.getFactor()))
@@ -120,7 +120,7 @@ public class SensorService {
                     .orElse(null);
 
             if (existingActive != null && existingActive.getLevel() == alert.getLevel()) {
-                continue; // ปัญหาเดิม ระดับเดิม ยังต่อเนื่องอยู่ — ไม่ต้อง insert ซ้ำ
+                continue; // same problem, same level, still ongoing
             }
             if (existingActive != null) {
                 try {
@@ -145,6 +145,27 @@ public class SensorService {
             log.error("Failed to get latest sensor data for device {}", deviceId, e);
             throw new RuntimeException("Database error", e);
         }
+    }
+
+    /**
+     * The latest reading for a device, as the pipeline consumes it.
+     *
+     * <p>Test Plan reference: UTC-01 ({@code getSensorData()}). Where the Flutter
+     * client mocks an HTTP GET of /api/sensor/latest, the server-side equivalent
+     * mocks the repository — both end up asking the same question.
+     *
+     * <ul>
+     *   <li>a stored reading comes back as-is (UTC-01.01);</li>
+     *   <li>no stored reading yields an empty {@link SensorData} whose fields are
+     *       all zero rather than a null or an exception (UTC-01.02);</li>
+     *   <li>a datastore failure throws, with a non-null message (UTC-01.03).</li>
+     * </ul>
+     */
+    public SensorData getSensorData(String deviceId) {
+        return getLatest(deviceId).orElseGet(() -> SensorData.builder()
+                .deviceId(deviceId)
+                .timestamp(Instant.now())
+                .build());
     }
 
     public List<SensorData> getRange(String deviceId, Instant from, Instant to) {

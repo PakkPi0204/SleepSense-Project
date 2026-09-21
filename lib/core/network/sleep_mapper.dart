@@ -5,28 +5,26 @@ import 'api_models.dart';
 import '../scoring/environment_scoring.dart';
 import '../../features/sleep/models/sleep_models.dart';
 
-/// แปลง SensorDataDto → models ของหน้า Sleep
+/// Maps SensorDataDto onto the Sleep screen models.
 ///
-/// หมายเหตุ: เดิมไฟล์นี้ hardcode ค่า threshold ไว้ตรงๆ (18-26°C, 30-60% ฯลฯ)
-/// แยกจากค่าที่ DashboardMapper ใช้ (ซึ่งดึงจาก [ThresholdSettingsDto] ที่ผู้ใช้
-/// ปรับเองผ่านหน้า Settings) — ทำให้หน้า Sleep กับหน้า Home ตัดสิน
-/// Optimal/Warning ของค่าเดียวกันไม่ตรงกัน ทุกฟังก์ชันด้านล่างนี้จึงรับ
-/// [ThresholdSettingsDto?] เข้ามาเช่นเดียวกับ DashboardMapper และ fallback ไป
-/// ใช้ default ชุดเดียวกันเป๊ะๆ เมื่อไม่ได้ส่งมา เพื่อให้ทั้งแอปตัดสินสถานะของ
-/// sensor ตัวเดียวกันตรงกันเสมอไม่ว่าจะดูจากหน้าไหน
+/// This file used to hardcode its thresholds (18-26°C, 30-60% and so on),
+/// separately from the ones DashboardMapper reads out of [ThresholdSettingsDto],
+/// so Sleep and Home could disagree about the same value. Every function below
+/// now takes a [ThresholdSettingsDto?] like DashboardMapper does, and falls back
+/// to exactly the same defaults, so the whole app agrees on a reading's status
+/// no matter which screen you look at.
 ///
-/// เดิมยังมีอีกปัญหาซ้อนอยู่ในคะแนน "Sleep Readiness" เอง (แยกจากปัญหา
-/// threshold ไม่ตรงกันด้านบน): คะแนนรวมของหน้านี้กับ "Sleep Environment
-/// Score" หน้า Home คำนวณคนละสูตร (หน้า Home ใช้สูตร "หัก" ทีละก้อนตาม
-/// warning/critical, หน้านี้ใช้สูตร "ไล่เชิงเส้น") ทำให้ sensor ชุดเดียวกัน
-/// ได้คะแนนไม่ตรงกันแม้ threshold จะตรงกันแล้วก็ตาม จึงย้ายสูตรคำนวณไปไว้ที่
-/// เดียวใน [EnvironmentScoring] แล้วให้ทั้งสองหน้าเรียกใช้ร่วมกัน
-/// (ดู DashboardMapper.toEnvironmentScore) เพื่อการันตีว่าตัวเลขตรงกันเสมอ
+/// A second problem sat on top of that one, in the Sleep Readiness score itself:
+/// this screen and the Sleep Environment Score on Home used different formulas
+/// (Home deducted points per warning or critical; this screen scaled linearly),
+/// so one reading produced two different numbers even once the thresholds
+/// matched. The formula now lives in one place, [EnvironmentScoring], and both
+/// screens call it (see DashboardMapper.toEnvironmentScore).
 class SleepMapper {
   SleepMapper._();
 
-  /// คำนวณ Sleep Readiness จากค่า sensor โดยอิงตาม threshold ของผู้ใช้ (ถ้ามี)
-  /// — ใช้สูตรเดียวกับ Sleep Environment Score หน้า Home ผ่าน [EnvironmentScoring]
+  /// Sleep Readiness from a sensor reading, against the user's thresholds when
+  /// present — same formula as Home's Sleep Environment Score, via [EnvironmentScoring].
   static SleepReadiness toReadiness(
     SensorDataDto d, {
     ThresholdSettingsDto? thresholds,
@@ -70,8 +68,8 @@ class SleepMapper {
     );
   }
 
-  /// แปลงเป็น Environment Checklist (6 รายการ) โดยอิงตาม threshold ของผู้ใช้
-  /// (ถ้ามี) — ใช้เกณฑ์เดียวกันกับ DashboardMapper.toSensorReadings เป๊ะๆ
+  /// The six-item Environment Checklist, against the user's thresholds when
+  /// present — exactly the criteria DashboardMapper.toSensorReadings uses.
   static List<EnvironmentCheckItem> toChecklist(
     SensorDataDto d, {
     ThresholdSettingsDto? thresholds,

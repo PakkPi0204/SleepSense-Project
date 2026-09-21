@@ -4,12 +4,12 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/storage/suggestion_ack_store.dart';
 import '../../models/dashboard_models.dart';
 
-/// การ์ด "Smart Suggestion" — ไม่ใช่แค่ข้อความเฉยๆ แต่มีปุ่ม action ให้กด
-/// จัดการปัญหาได้เลย (เช่น "เปิดพัดลม/แอร์") ปุ่มจะเปลี่ยนเป็น "เปิดแล้ว ✓"
-/// เมื่อกด และสถานะนี้ถูกบันทึกลง local storage ของเครื่อง (ไม่ใช่แค่ memory)
-/// ผูกกับ [suggestion.factorKey] — ดังนั้นแม้ผู้ใช้จะปิดแอปแล้วเปิดใหม่ ปุ่มก็ยัง
-/// แสดงสถานะ "เปิดแล้ว" อยู่เหมือนเดิม ตราบใดที่ยังเป็นปัญหาเดียวกัน (factor
-/// เดิม) — จนกว่าสภาพแวดล้อมจะกลับมาปกติแล้วเกิดปัญหานี้ซ้ำใหม่อีกครั้ง
+/// The "Smart Suggestion" card. More than a message: it carries an action button
+/// the user can press ("Turn on the fan"), which then reads as done.
+///
+/// That state is persisted to local storage against [suggestion.factorKey], not
+/// merely held in memory, so it survives an app restart for as long as this is
+/// the same problem — until conditions return to normal and it recurs.
 class PreSleepSuggestionCard extends StatefulWidget {
   final PreSleepSuggestion suggestion;
 
@@ -33,8 +33,8 @@ class _PreSleepSuggestionCardState extends State<PreSleepSuggestionCard> {
   @override
   void didUpdateWidget(covariant PreSleepSuggestionCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // ปัญหาเปลี่ยน factor (เช่น หายจาก TEMP_HIGH กลายเป็น OK หรือปัญหาอื่น) —
-    // โหลดสถานะ ack ของ factor ใหม่แทนของเก่า ไม่ปนกัน
+    // The factor changed (TEMP_HIGH cleared to OK, or a different problem took
+    // over), so load the new factor's acknowledgement rather than the old one.
     if (oldWidget.suggestion.factorKey != widget.suggestion.factorKey) {
       _loadAckState();
     }
@@ -144,7 +144,7 @@ class _PreSleepSuggestionCardState extends State<PreSleepSuggestionCard> {
                       icon: const Icon(Icons.check_circle,
                           color: AppColors.secondary, size: 18),
                       label: Text(
-                        '${suggestion.actionLabel} แล้ว',
+                        '${suggestion.actionLabel} — done',
                         style: const TextStyle(
                           color: AppColors.secondary,
                           fontWeight: FontWeight.w700,

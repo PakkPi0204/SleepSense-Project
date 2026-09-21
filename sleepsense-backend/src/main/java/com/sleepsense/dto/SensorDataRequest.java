@@ -4,7 +4,7 @@ import jakarta.validation.constraints.*;
 import lombok.Data;
 
 /**
- * DTO รับข้อมูล sensor จาก ESP32
+ * Payload the ESP32 posts for one round of sensor readings.
  */
 @Data
 public class SensorDataRequest {

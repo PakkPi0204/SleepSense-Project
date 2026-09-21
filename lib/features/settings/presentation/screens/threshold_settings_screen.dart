@@ -5,9 +5,10 @@ import '../../../../core/network/api_config.dart';
 import '../../../../core/network/api_models.dart';
 import '../../../../core/network/api_service.dart';
 
-/// หน้าปรับ threshold การแจ้งเตือนด้วยตัวเอง — เผื่อบางคนต้องนอนห้องเย็นกว่าปกติ,
-/// ไวต่อฝุ่น/เสียงมากกว่าค่าเฉลี่ยทั่วไป ฯลฯ ค่าที่ปรับจะถูกบันทึกไว้ที่ backend
-/// (ผูกกับ deviceId) แล้วมีผลกับทั้ง alert badge สีต่างๆ และ critical popup
+/// Lets the user tune the alert thresholds themselves — for people who need a
+/// cooler room than average, or who react more strongly to dust or noise. The
+/// values are stored on the backend against the deviceId and drive both the
+/// status colours and the critical popup.
 class ThresholdSettingsScreen extends StatefulWidget {
   const ThresholdSettingsScreen({super.key});
 
@@ -49,7 +50,7 @@ class _ThresholdSettingsScreenState extends State<ThresholdSettingsScreen> {
       });
     } catch (e) {
       setState(() {
-        _error = 'โหลดค่า threshold ไม่ได้: $e';
+        _error = 'Could not load thresholds: $e';
         _loading = false;
       });
     }
@@ -65,11 +66,11 @@ class _ThresholdSettingsScreenState extends State<ThresholdSettingsScreen> {
         _settings = saved;
         _saving = false;
       });
-      _showSnack('บันทึกค่า threshold แล้ว ✓', isError: false);
+      _showSnack('Thresholds saved', isError: false);
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
-      _showSnack('บันทึกไม่สำเร็จ: $e', isError: true);
+      _showSnack('Could not save: $e', isError: true);
     }
   }
 
@@ -78,21 +79,21 @@ class _ThresholdSettingsScreenState extends State<ThresholdSettingsScreen> {
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: AppColors.card,
-        title: const Text('รีเซ็ตค่า threshold?',
+        title: const Text('Reset thresholds?',
             style: TextStyle(color: AppColors.white)),
         content: const Text(
-          'จะกลับไปใช้ค่าเริ่มต้นของระบบทั้งหมด การปรับแต่งที่ทำไว้จะหายไป',
+          'Everything goes back to the system defaults. Your adjustments will be lost.',
           style: TextStyle(color: AppColors.neutral),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('ยกเลิก',
+            child: const Text('Cancel',
                 style: TextStyle(color: AppColors.neutral)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('รีเซ็ต',
+            child: const Text('Reset',
                 style: TextStyle(color: Color(0xFFE85D5D))),
           ),
         ],
@@ -108,11 +109,11 @@ class _ThresholdSettingsScreenState extends State<ThresholdSettingsScreen> {
         _settings = reset;
         _saving = false;
       });
-      _showSnack('รีเซ็ตกลับเป็นค่าเริ่มต้นแล้ว', isError: false);
+      _showSnack('Reset to system defaults', isError: false);
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
-      _showSnack('รีเซ็ตไม่สำเร็จ: $e', isError: true);
+      _showSnack('Could not reset: $e', isError: true);
     }
   }
 
@@ -133,11 +134,11 @@ class _ThresholdSettingsScreenState extends State<ThresholdSettingsScreen> {
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.white,
         elevation: 0,
-        title: const Text('ปรับค่าการแจ้งเตือน'),
+        title: const Text('Alert thresholds'),
       ),
-      // Center + ConstrainedBox(430) คือ layout wrapper ที่ทุกหน้าในแอปใช้
-      // เหมือนกันหมด (Dashboard, Stats, Sleep, Settings, Alerts) — เดิมหน้านี้
-      // ไม่มี เลยยืดเต็มจอบนจอกว้าง (tablet/web) ไม่เหมือนหน้าอื่น
+      // Center + ConstrainedBox(430) is the layout wrapper every screen uses
+      // (Dashboard, Patterns, Sleep, Settings, Alerts). This screen used to lack
+      // it, so it stretched edge to edge on tablets and web unlike the rest.
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 430),
@@ -166,7 +167,7 @@ class _ThresholdSettingsScreenState extends State<ThresholdSettingsScreen> {
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: AppColors.neutral)),
               const SizedBox(height: 16),
-              ElevatedButton(onPressed: _load, child: const Text('ลองใหม่')),
+              ElevatedButton(onPressed: _load, child: const Text('Try again')),
             ],
           ),
         ),
@@ -174,8 +175,8 @@ class _ThresholdSettingsScreenState extends State<ThresholdSettingsScreen> {
     }
 
     final s = _settings!;
-    // RefreshIndicator + subtitle บนสุด + bottom padding 150 คือ pattern
-    // เดียวกับหน้า Alerts/Dashboard — ให้ pull-to-refresh ใช้ได้เหมือนกันทั้งแอป
+    // RefreshIndicator + a subtitle at the top + 150 of bottom padding is the
+    // same pattern as Alerts and Dashboard, so pull-to-refresh works everywhere.
     return RefreshIndicator(
       onRefresh: _load,
       color: AppColors.secondary,
@@ -185,19 +186,19 @@ class _ThresholdSettingsScreenState extends State<ThresholdSettingsScreen> {
         padding: const EdgeInsets.fromLTRB(24, 20, 24, 150),
         children: [
           const Text(
-            'ปรับความไวของการแจ้งเตือนให้เข้ากับตัวเอง',
+            'Tune how sensitive your alerts are',
             style: TextStyle(color: AppColors.neutral, fontSize: 14),
           ),
           const SizedBox(height: 20),
           _headerBanner(s.customized),
         const SizedBox(height: 20),
         _factorCard(
-          title: 'อุณหภูมิ (Temperature)',
+          title: 'Temperature',
           icon: Icons.thermostat_outlined,
           child: Column(
             children: [
               _rangeRow(
-                label: 'ช่วงสบาย (Warning นอกช่วงนี้)',
+                label: 'Comfort range (warning outside)',
                 unit: '°C',
                 lowValue: s.temperatureMin ?? 18,
                 highValue: s.temperatureMax ?? 26,
@@ -211,7 +212,7 @@ class _ThresholdSettingsScreenState extends State<ThresholdSettingsScreen> {
               ),
               const SizedBox(height: 18),
               _rangeRow(
-                label: 'ขีดวิกฤต (Critical นอกช่วงนี้)',
+                label: 'Critical limits (critical outside)',
                 unit: '°C',
                 lowValue: s.temperatureCriticalMin ?? 15,
                 highValue: s.temperatureCriticalMax ?? 32,
@@ -228,12 +229,12 @@ class _ThresholdSettingsScreenState extends State<ThresholdSettingsScreen> {
           ),
         ),
         _factorCard(
-          title: 'ความชื้น (Humidity)',
+          title: 'Humidity',
           icon: Icons.water_drop_outlined,
           child: Column(
             children: [
               _rangeRow(
-                label: 'ช่วงสบาย (Warning นอกช่วงนี้)',
+                label: 'Comfort range (warning outside)',
                 unit: '%',
                 lowValue: s.humidityMin ?? 30,
                 highValue: s.humidityMax ?? 60,
@@ -247,7 +248,7 @@ class _ThresholdSettingsScreenState extends State<ThresholdSettingsScreen> {
               ),
               const SizedBox(height: 18),
               _rangeRow(
-                label: 'ขีดวิกฤต (Critical นอกช่วงนี้)',
+                label: 'Critical limits (critical outside)',
                 unit: '%',
                 lowValue: s.humidityCriticalMin ?? 20,
                 highValue: s.humidityCriticalMax ?? 70,
@@ -280,7 +281,7 @@ class _ThresholdSettingsScreenState extends State<ThresholdSettingsScreen> {
           ),
         ),
         _factorCard(
-          title: 'ฝุ่น PM2.5',
+          title: 'PM2.5',
           icon: Icons.speed_outlined,
           child: _twoSliders(
             unit: 'µg/m³',
@@ -296,7 +297,7 @@ class _ThresholdSettingsScreenState extends State<ThresholdSettingsScreen> {
           ),
         ),
         _factorCard(
-          title: 'เสียงรบกวน (Noise)',
+          title: 'Noise',
           icon: Icons.volume_up_outlined,
           child: _twoSliders(
             unit: 'dB',
@@ -312,7 +313,7 @@ class _ThresholdSettingsScreenState extends State<ThresholdSettingsScreen> {
           ),
         ),
         _factorCard(
-          title: 'ความสว่าง (Light)',
+          title: 'Light',
           icon: Icons.wb_sunny_outlined,
           child: _twoSliders(
             unit: 'lux',
@@ -321,8 +322,8 @@ class _ThresholdSettingsScreenState extends State<ThresholdSettingsScreen> {
             min: 0,
             max: 400,
             divisions: 80,
-            warningLabel: 'Warning (สว่างเกิน)',
-            criticalLabel: 'Critical (สว่างมาก)',
+            warningLabel: 'Warning (too bright)',
+            criticalLabel: 'Critical (very bright)',
             onWarningChanged: (v) =>
                 setState(() => _settings = s.copyWith(lightMax: v)),
             onCriticalChanged: (v) =>
@@ -350,7 +351,7 @@ class _ThresholdSettingsScreenState extends State<ThresholdSettingsScreen> {
                     child: CircularProgressIndicator(
                         strokeWidth: 2.4, color: AppColors.primary),
                   )
-                : const Text('บันทึกค่า',
+                : const Text('Save',
                     style:
                         TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
           ),
@@ -359,7 +360,7 @@ class _ThresholdSettingsScreenState extends State<ThresholdSettingsScreen> {
         Center(
           child: TextButton(
             onPressed: _saving ? null : _reset,
-            child: const Text('รีเซ็ตเป็นค่าเริ่มต้นของระบบ',
+            child: const Text('Reset to system defaults',
                 style: TextStyle(color: AppColors.neutral, fontSize: 13)),
           ),
         ),
@@ -391,8 +392,8 @@ class _ThresholdSettingsScreenState extends State<ThresholdSettingsScreen> {
           Expanded(
             child: Text(
               customized
-                  ? 'กำลังใช้ค่าที่คุณปรับเอง'
-                  : 'กำลังใช้ค่าเริ่มต้นของระบบ — ลากแถบด้านล่างเพื่อปรับตามที่เหมาะกับคุณ',
+                  ? 'Using your own values'
+                  : 'Using the system defaults — drag the sliders below to suit you',
               style: const TextStyle(color: AppColors.white, fontSize: 12.5, height: 1.4),
             ),
           ),
@@ -442,7 +443,7 @@ class _ThresholdSettingsScreenState extends State<ThresholdSettingsScreen> {
     );
   }
 
-  /// ใช้กับ CO2 / PM2.5 / Noise / Light — ยิ่งค่าสูงยิ่งแย่ (single-direction)
+  /// For CO2 / PM2.5 / Noise / Light, which only get worse in one direction.
   Widget _twoSliders({
     required String unit,
     required double warningValue,
@@ -526,7 +527,7 @@ class _ThresholdSettingsScreenState extends State<ThresholdSettingsScreen> {
     );
   }
 
-  /// ช่วงต่ำ-สูง แสดงเป็น RangeSlider เดียว (ใช้กับอุณหภูมิ/ความชื้น ที่มีทั้งขอบบนขอบล่าง)
+  /// A low-high band as one RangeSlider (temperature and humidity have both bounds).
   Widget _rangeRow({
     required String label,
     required String unit,
@@ -542,7 +543,7 @@ class _ThresholdSettingsScreenState extends State<ThresholdSettingsScreen> {
     final hi = highValue.clamp(min, max);
     final values = lo <= hi
         ? RangeValues(lo, hi)
-        : RangeValues(hi, lo); // กันพัง ถ้า lo>hi จากการลากสวนกัน
+        : RangeValues(hi, lo); // guards against lo > hi when thumbs cross
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

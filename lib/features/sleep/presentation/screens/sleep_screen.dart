@@ -52,11 +52,11 @@ class _SleepScreenState extends State<SleepScreen> {
   Future<void> _loadData({bool silent = false}) async {
     if (!silent) setState(() => _loading = true);
     try {
-      // ดึง threshold ของผู้ใช้มาด้วยเสมอ (เช่นเดียวกับหน้า Home) เพื่อให้หน้า
-      // Sleep ตัดสิน Optimal/Warning ของค่า sensor เดียวกันตรงกับหน้าอื่นๆ ใน
-      // แอป แทนที่จะใช้เกณฑ์ hardcode ของตัวเองแยกต่างหาก — ยิงคู่กันแบบไม่พึ่ง
-      // กัน ถ้า threshold endpoint พังรอบนี้ SleepMapper จะ fallback เป็นค่า
-      // default เอง ไม่ทำให้ sensor reading หายไปด้วย
+      // Always fetch the user thresholds too, like the Home screen does, so
+      // that Sleep classifies the same reading the same way as everywhere else
+      // rather than using its own hardcoded limits. The two requests are
+      // independent: if the threshold endpoint fails this round, SleepMapper
+      // falls back to the defaults rather than losing the sensor reading too.
       final sensorFuture = _api.fetchLatestSensor();
       final thresholdsFuture = _safeThresholds();
 
@@ -79,9 +79,9 @@ class _SleepScreenState extends State<SleepScreen> {
     }
   }
 
-  /// ห่อ fetchThresholds ไม่ให้ error ของ endpoint นี้ไปบล็อก sensor reading —
-  /// ถ้าพังรอบนี้ ให้ถือว่าไม่มี threshold ที่ผู้ใช้ปรับเอง (SleepMapper จะใช้
-  /// ค่า default แทน) แทนที่จะทำให้ทั้งหน้าล้มเหลวไปด้วย
+  /// Wraps fetchThresholds so a failure there cannot block the sensor reading.
+  /// On failure we treat the user as having no custom thresholds and SleepMapper
+  /// uses the defaults, instead of failing the whole screen.
   Future<ThresholdSettingsDto?> _safeThresholds() async {
     try {
       return await _api.fetchThresholds(deviceId: ApiConfig.deviceId);
@@ -150,7 +150,7 @@ class _SleepScreenState extends State<SleepScreen> {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'ยังไม่ได้เชื่อมต่อ backend — กำลังแสดงข้อมูลตัวอย่าง (ดึงลงเพื่อลองใหม่)',
+              'Not connected to the backend — showing sample data (pull to retry)',
               style: const TextStyle(color: AppColors.neutral, fontSize: 12),
             ),
           ),

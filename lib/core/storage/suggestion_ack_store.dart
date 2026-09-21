@@ -1,13 +1,13 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// เก็บสถานะ "จัดการแล้ว/เปิดแล้ว" ของคำแนะนำและ critical alert แต่ละปัจจัย
-/// (factor) ลง local storage ของเครื่อง (SharedPreferences) แทนการเก็บไว้แค่ใน
-/// memory ของ widget — ทำให้ปุ่ม "เปิดแล้ว ✓" คงสถานะเดิมอยู่ แม้ผู้ใช้จะปิดแอป
-/// ไปแล้วเปิดใหม่ (force-kill + reopen) ก็ตาม
+/// Stores the "handled" state of each suggestion and critical alert, per factor,
+/// in local storage (SharedPreferences) rather than only in widget memory. That
+/// way the "done" button keeps its state even after the app is force-killed and
+/// reopened.
 ///
-/// key ที่ใช้เป็น "factor" ของปัญหา (เช่น TEMP_HIGH, CRITICAL_CO2) ไม่ใช่ id ของ
-/// แต่ละแถว sensor/alert ที่เปลี่ยนทุกรอบ 30 วิ — เพราะเราต้องการจำ "ปัญหานี้
-/// ถูกจัดการแล้ว" ไม่ใช่จำแค่ "เคยเห็น record นี้แล้ว"
+/// The key is the problem's factor (TEMP_HIGH, CRITICAL_CO2), not the id of a
+/// sensor or alert row that changes every 30 seconds — we want to remember that
+/// this problem was handled, not merely that a record was seen.
 class SuggestionAckStore {
   SuggestionAckStore._();
   static final SuggestionAckStore instance = SuggestionAckStore._();
@@ -29,9 +29,9 @@ class SuggestionAckStore {
     await prefs.remove('$_prefix$factorKey');
   }
 
-  /// ล้างสถานะ "จัดการแล้ว" ทั้งหมดที่เคยบันทึกไว้ — เรียกตอนสภาพแวดล้อมกลับมา
-  /// ปกติ/ดีแล้ว (ไม่มีปัญหาเหลือ) เพื่อให้รอบหน้าที่ปัญหาเดิมเกิดซ้ำ ระบบจะเตือน
-  /// ใหม่ตามปกติ แทนที่จะค้างสถานะ "เปิดแล้ว" ไปตลอดกาลจากครั้งก่อนหน้า
+  /// Clear every stored acknowledgement. Called once conditions are back to
+  /// normal with nothing outstanding, so that if the same problem recurs the
+  /// user is warned again instead of the old "done" state lingering forever.
   Future<void> clearAll() async {
     final prefs = await SharedPreferences.getInstance();
     final keys = prefs.getKeys().where((k) => k.startsWith(_prefix));

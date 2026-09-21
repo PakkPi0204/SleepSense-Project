@@ -11,14 +11,14 @@ import java.util.List;
 import java.util.OptionalDouble;
 
 /**
- * สร้าง Morning Report จากข้อมูลตลอดคืน
+ * Builds a Morning Report from a whole night of readings.
  */
 @Component
 public class MorningReportGenerator {
 
     private final EnvironmentClusterer clusterer;
 
-    /** default config — ใช้เมื่อผู้เรียกไม่ได้ระบุ effective config มาให้ (เช่น เทส) */
+    /** Default config, used when the caller does not supply an effective one (e.g. tests). */
     private final ThresholdConfig defaultCfg;
 
     public MorningReportGenerator(EnvironmentClusterer clusterer, ThresholdConfig defaultCfg) {
@@ -32,9 +32,10 @@ public class MorningReportGenerator {
     }
 
     /**
-     * @param cfg threshold ที่ "ใช้งานจริง" ของ device นี้ (custom ถ้ามี ไม่งั้น default) —
-     *            ผู้เรียกควรดึงมาจาก ThresholdSettingsService.getEffective(deviceId) เสมอ
-     *            เพื่อให้ anomaly/suggestion sync กับค่าที่ผู้ใช้ปรับเอง
+     * @param cfg this device's effective thresholds (custom if any, otherwise
+     *            the defaults). Callers should always take this from
+     *            ThresholdSettingsService.getEffective(deviceId) so anomalies
+     *            and suggestions stay in step with what the user configured.
      */
     public MorningReport generate(String deviceId, List<SensorData> data,
                                    Instant sleepStart, Instant sleepEnd, ThresholdConfig cfg) {
@@ -78,9 +79,10 @@ public class MorningReportGenerator {
         List<String> suggestions = buildSuggestions(avgTemp, avgCo2, avgPm25, avgNoise, motionPattern, cluster, cfg);
 
         // ─── Data completeness ───
-        // ESP32 ส่งทุก 30 วิ = 2 ครั้ง/นาที → คำนวณว่าเก็บได้กี่ % ของที่ควรได้
+        // The ESP32 posts every 30s = 2 samples/minute, so work out what share
+        // of the expected samples actually arrived.
         long minutes = java.time.Duration.between(sleepStart, sleepEnd).toMinutes();
-        int expected = (int) Math.max(1, minutes * 2); // อย่างน้อย 1 กันหารศูนย์
+        int expected = (int) Math.max(1, minutes * 2); // at least 1, to avoid dividing by zero
         int completeness = (int) Math.min(100, Math.round(data.size() * 100.0 / expected));
 
         return MorningReport.builder()
@@ -113,14 +115,14 @@ public class MorningReportGenerator {
                                           String motionPattern, ThresholdConfig cfg) {
         List<String> anomalies = new ArrayList<>();
         if (avgTemp > cfg.getTemperatureMax())
-            anomalies.add("อุณหภูมิเฉลี่ยสูงตลอดคืน (" + avgTemp + "°C)");
+            anomalies.add("Average temperature stayed high all night (" + avgTemp + "°C)");
         if (maxCo2 > cfg.getCo2Warning())
-            anomalies.add("CO₂ สูงสุดเกินมาตรฐาน (" + (int) maxCo2 + " ppm)");
+            anomalies.add("Peak CO2 went over the recommended limit (" + (int) maxCo2 + " ppm)");
         if (maxPm25 > cfg.getPm25Warning())
-            anomalies.add("ฝุ่น PM2.5 สูงสุดเกินมาตรฐาน (" + maxPm25 + " µg/m³)");
+            anomalies.add("Peak PM2.5 went over the recommended limit (" + maxPm25 + " µg/m³)");
         if (maxNoise > cfg.getNoiseCritical())
-            anomalies.add("มีเสียงรบกวนระดับสูง (" + (int) maxNoise + " dB)");
-        if ("HIGH".equals(motionPattern)) anomalies.add("ตรวจพบการเคลื่อนไหวบ่อยครั้งระหว่างนอน");
+            anomalies.add("Loud noise was recorded (" + (int) maxNoise + " dB)");
+        if ("HIGH".equals(motionPattern)) anomalies.add("Frequent movement was detected during the night");
         return anomalies;
     }
 
@@ -130,20 +132,20 @@ public class MorningReportGenerator {
         List<String> s = new ArrayList<>();
 
         if (avgTemp > cfg.getTemperatureMax())
-            s.add("ลองปรับอุณหภูมิแอร์ให้อยู่ที่ " + (int) cfg.getTemperatureMin()
-                    + "–" + (int) cfg.getTemperatureMax() + "°C เพื่อการนอนที่สบายขึ้น");
+            s.add("Try setting the air conditioning to " + (int) cfg.getTemperatureMin()
+                    + "-" + (int) cfg.getTemperatureMax() + "°C for a more comfortable night");
         if (avgCo2 > cfg.getCo2Warning())
-            s.add("เปิดหน้าต่างหรือปรับระบบระบายอากาศก่อนนอน เพื่อลด CO₂");
+            s.add("Open a window or improve ventilation before bed to bring CO2 down");
         if (avgPm25 > cfg.getPm25Warning())
-            s.add("ใช้เครื่องฟอกอากาศในห้องนอนเพื่อลดฝุ่น PM2.5");
+            s.add("Run an air purifier in the bedroom to reduce PM2.5");
         if (avgNoise > cfg.getNoiseWarning())
-            s.add("ลดแหล่งเสียงรบกวนหรือใช้เครื่องเสียงสีขาว (white noise)");
+            s.add("Reduce noise sources, or mask them with white noise");
         if ("HIGH".equals(motionPattern))
-            s.add("การเคลื่อนไหวบ่อยอาจเกิดจากความไม่สบายตัว — ตรวจสอบอุณหภูมิและที่นอน");
+            s.add("Frequent movement often means discomfort — check the temperature and your mattress");
         if ("GOOD".equals(cluster))
-            s.add("สภาพแวดล้อมห้องนอนโดยรวมดี ✓ รักษาสภาพนี้ต่อไป");
+            s.add("Your bedroom environment was good overall — keep it up");
         if (s.isEmpty())
-            s.add("สภาพแวดล้อมห้องนอนอยู่ในเกณฑ์ดี ไม่มีข้อแนะนำเพิ่มเติม");
+            s.add("Your bedroom environment was within range. No further suggestions");
 
         return s;
     }

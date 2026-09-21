@@ -1,34 +1,33 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Flag สำหรับโหมดทดสอบระหว่างพัฒนา
+/// Flags for development and testing.
 ///
-/// เดิม [alwaysShowCriticalOnLoad] เป็น static bool เก็บใน memory ล้วนๆ —
-/// toggle ในหน้า Settings > Developer จะรีเซ็ตกลับเป็น false ทุกครั้งที่ปิดแอป
-/// (force-kill) แล้วเปิดใหม่ ทั้งที่ผู้ใช้เพิ่งเปิดสวิตช์ไว้ ตอนนี้ persist ค่า
-/// ผ่าน SharedPreferences แทน — ต้องเรียก [load] ครั้งเดียวตอนแอปเริ่มทำงาน
-/// (ใน main() ก่อน runApp) เพื่อกู้ค่าที่เคยตั้งไว้กลับมาก่อน widget แรกจะ build
+/// [alwaysShowCriticalOnLoad] used to be a plain in-memory static bool, so the
+/// Settings > Developer toggle reset to false every time the app was force-killed
+/// and reopened. It now persists through SharedPreferences, which means [load]
+/// must be called once at startup (in main(), before runApp).
 abstract final class DebugFlags {
   static bool alwaysShowCriticalOnLoad = false;
 
   static const _kAlwaysShowCriticalKey = 'debug_always_show_critical';
 
-  /// โหลดค่าที่เคยบันทึกไว้จาก storage — เรียกครั้งเดียวตอนแอปเริ่มทำงาน
+  /// Load the saved value from storage. Call once at startup.
   static Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
     alwaysShowCriticalOnLoad = prefs.getBool(_kAlwaysShowCriticalKey) ?? false;
   }
 
-  /// ปกติ (false): critical alert popup จะเด้งให้ก็ต่อเมื่อยังไม่เคยถูก
-  /// "รับทราบว่าจัดการแล้ว" (เช็คจาก SuggestionAckStore ซึ่ง persist ข้าม
-  /// การปิด-เปิดแอป) — ถ้าเคยกดปุ่ม action ใน dialog ไปแล้ว จะไม่เด้งซ้ำอีก
-  /// จนกว่าปัญหานั้นจะหายไปแล้วเกิดขึ้นใหม่
+  /// Normal (false): the critical alert popup appears only for a problem that has
+  /// not yet been acknowledged (checked against SuggestionAckStore, which
+  /// persists across restarts). Once the action button has been pressed it will
+  /// not reappear until that problem clears and recurs.
   ///
-  /// โหมดทดสอบ (true): เด้ง popup ให้ critical alert ทุกตัวที่เจอเสมอ ไม่สนใจ
-  /// สถานะ acknowledge ที่เคยบันทึกไว้ — มีประโยชน์ตอนทดสอบว่า popup แสดงผล
-  /// ถูกต้องหรือไม่ โดยไม่ต้องไปเคลียร์ local storage เอง
+  /// Test mode (true): show the popup for every critical alert found, ignoring
+  /// any stored acknowledgement. Handy for checking the popup renders correctly
+  /// without clearing local storage by hand.
   ///
-  /// ใช้ตัวนี้แทนการเซ็ต [alwaysShowCriticalOnLoad] ตรงๆ จากหน้า UI เพื่อให้
-  /// ค่าที่ผู้ใช้ตั้งถูกบันทึกลง storage ด้วย ไม่ใช่แค่เปลี่ยนใน memory
+  /// Use this rather than assigning [alwaysShowCriticalOnLoad] directly from the
+  /// UI, so the choice is written to storage and not just held in memory.
   static Future<void> setAlwaysShowCriticalOnLoad(bool value) async {
     alwaysShowCriticalOnLoad = value;
     final prefs = await SharedPreferences.getInstance();

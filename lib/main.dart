@@ -4,11 +4,11 @@ import 'app/sleepsense_app.dart';
 import 'core/debug/debug_flags.dart';
 
 void main() async {
-  // ต้องเรียกก่อนใช้ shared_preferences (หรือ plugin ใดๆ) ตอนที่ยังไม่มี
-  // Widget ถูก build เลย
+  // Required before touching shared_preferences (or any plugin) while no
+  // widget has been built yet.
   WidgetsFlutterBinding.ensureInitialized();
-  // กู้ค่า Developer toggle ("บังคับเด้ง Critical Popup") ที่เคยตั้งไว้กลับมา
-  // ก่อน — ไม่งั้นจะรีเซ็ตเป็น false ทุกครั้งที่เปิดแอปใหม่
+  // Restore the developer toggle ("Always show critical popup") before the
+  // first build, otherwise it resets to false on every launch.
   await DebugFlags.load();
   runApp(const SleepSenseApp());
 }

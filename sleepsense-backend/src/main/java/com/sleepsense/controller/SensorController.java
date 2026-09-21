@@ -20,7 +20,7 @@ public class SensorController {
 
     /**
      * POST /api/sensor/data
-     * ESP32 ส่งข้อมูล sensor มาทุก 30–60 วินาที
+     * The ESP32 posts sensor data every 30-60 seconds.
      */
     @PostMapping("/data")
     public ResponseEntity<ApiResponse<SensorData>> ingest(@Valid @RequestBody SensorDataRequest req) {
@@ -30,7 +30,7 @@ public class SensorController {
 
     /**
      * GET /api/sensor/latest?deviceId=xxx
-     * Flutter app ดึงค่าล่าสุดเพื่อแสดง real-time dashboard
+     * The Flutter app fetches the latest values for the real-time dashboard.
      */
     @GetMapping("/latest")
     public ResponseEntity<ApiResponse<SensorData>> getLatest(@RequestParam String deviceId) {
@@ -41,7 +41,7 @@ public class SensorController {
 
     /**
      * GET /api/sensor/presleep?deviceId=xxx
-     * Flutter app ขอคำแนะนำก่อนนอน
+     * The Flutter app asks for pre-sleep advice.
      */
     @GetMapping("/presleep")
     public ResponseEntity<ApiResponse<List<String>>> getPreSleepSuggestions(@RequestParam String deviceId) {

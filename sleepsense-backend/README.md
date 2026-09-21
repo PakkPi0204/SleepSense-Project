@@ -1,42 +1,42 @@
 # SleepSense Backend
 
-Spring Boot backend สำหรับโปรเจกต์ SleepSense — IoT Sleep Environment Monitoring System
+Spring Boot backend for SleepSense — an IoT sleep environment monitoring system.
 
 ---
 
-## วิธี Build & Run
+## Build and run
 
-### สิ่งที่ต้องมีก่อน
+### Prerequisites
 - Java 17 (JDK)
-- Maven (หรือใช้ IDE เช่น IntelliJ/VS Code ที่มี Maven ในตัว)
-- ไฟล์ Firebase service account key (JSON) — ดาวน์โหลดจาก Firebase Console →
+- Maven (or an IDE with Maven built in, such as IntelliJ or VS Code)
+- A Firebase service account key (JSON) — download it from the Firebase Console:
   Project Settings → Service Accounts → Generate new private key
 
-### ขั้นตอน
-1. วางไฟล์ Firebase key ที่ดาวน์โหลดมาไว้ที่
+### Steps
+1. Put the downloaded Firebase key at
    `sleepsense-backend/src/main/resources/firebase-service-account.json`
-2. แก้ `src/main/resources/application.properties` ให้ `firebase.database.url`
-   ตรงกับ Firestore project จริงของคุณ (ค่าเริ่มต้นเป็นแค่ placeholder)
-3. Build (ดาวน์โหลด dependency + compile + รัน unit test):
+2. Edit `src/main/resources/application.properties` so `firebase.database.url`
+   matches your real Firestore project — the default is only a placeholder.
+3. Build (fetch dependencies, compile, run the unit tests):
    ```
    cd sleepsense-backend
    mvn clean install
    ```
-4. รันเซิร์ฟเวอร์:
+4. Run the server:
    ```
    mvn spring-boot:run
    ```
-   หรือรันจาก jar ที่ build เสร็จแล้ว:
+   Or run the built jar:
    ```
    java -jar target/sleepsense-backend-1.0.0.jar
    ```
-5. เช็คว่าเซิร์ฟเวอร์ขึ้นสำเร็จ — ควรเห็น log "Started SleepSenseApplication"
-   แล้วลองเปิด `http://localhost:8080/api/thresholds?deviceId=test-device-01`
-   ในเบราว์เซอร์ ควรได้ JSON response กลับมา
+5. Check it started — you should see `Started SleepSenseApplication` in the log.
+   Then open `http://localhost:8080/api/thresholds?deviceId=test-device-01` in a
+   browser; it should return JSON.
 
-**หมายเหตุ:** ทุกครั้งที่แก้โค้ด Java หรือ `application.properties` ต้อง
-**restart เซิร์ฟเวอร์ใหม่** (`Ctrl+C` แล้วรัน `mvn spring-boot:run` อีกครั้ง)
-ค่าที่แก้ถึงจะมีผลจริง — ตัว build ไม่ได้ hot-reload อัตโนมัติ
+**Note:** after changing any Java file or `application.properties` you have to
+**restart the server** (`Ctrl+C`, then `mvn spring-boot:run` again) before the
+change takes effect. There is no hot reload.
 
 ---
 
@@ -51,34 +51,48 @@ Flutter App ◄──GET/POST────────┘
 ## Stack
 - **Spring Boot 3.2** (Java 17)
 - **Firebase Admin SDK** — Firestore database
-- **Lombok** — reduce boilerplate
-
+- **Lombok** — reduces boilerplate
 
 ---
 
-## API Endpoints
+## API endpoints
 
-### Sensor Data (ESP32 → Server)
-| Method | Endpoint | คำอธิบาย |
-|--------|----------|-----------|
-| POST | `/api/sensor/data` | ESP32 ส่งข้อมูล sensor |
-| GET | `/api/sensor/latest?deviceId=xxx` | ดึงค่าล่าสุด (real-time dashboard) |
-| GET | `/api/sensor/presleep?deviceId=xxx` | คำแนะนำ pre-sleep |
+### Sensor data (ESP32 → server)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/sensor/data` | the ESP32 posts a round of readings |
+| GET | `/api/sensor/latest?deviceId=xxx` | latest values, for the real-time dashboard |
+| GET | `/api/sensor/presleep?deviceId=xxx` | pre-sleep advice for the current reading |
 
-### Morning Report
-| Method | Endpoint | คำอธิบาย |
-|--------|----------|-----------|
-| POST | `/api/report/generate?deviceId=xxx&sleepStart=ms&sleepEnd=ms` | สร้างรายงานเช้า |
-| GET | `/api/report/latest?deviceId=xxx` | รายงานล่าสุด |
+### Morning reports
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/report/generate?deviceId=xxx&sleepStart=ms&sleepEnd=ms` | build a report for a sleep window |
+| GET | `/api/report/latest?deviceId=xxx` | the most recent report |
+| GET | `/api/report/history?deviceId=xxx&limit=30` | several nights of reports |
+| DELETE | `/api/report/{reportId}` | delete one report |
+
+### Smart suggestions
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/suggestions/smart?deviceId=xxx&nights=14` | multi-night pattern analysis: clustered nights, detected patterns and the advice derived from them |
 
 ### Alerts
-| Method | Endpoint | คำอธิบาย |
-|--------|----------|-----------|
-| GET | `/api/alerts/recent?deviceId=xxx&limit=20` | alert ล่าสุด |
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/alerts/recent?deviceId=xxx&limit=20` | full alert history, including resolved |
+| GET | `/api/alerts/active?deviceId=xxx` | only alerts that are still active |
+
+### Thresholds
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/thresholds?deviceId=xxx` | effective thresholds, with a `customized` flag |
+| PUT | `/api/thresholds?deviceId=xxx` | save custom thresholds |
+| DELETE | `/api/thresholds?deviceId=xxx` | reset to the system defaults |
 
 ---
 
-## ESP32 — ตัวอย่าง POST /api/sensor/data
+## ESP32 — example POST /api/sensor/data
 
 ```json
 {
@@ -101,29 +115,42 @@ Response:
   "data": {
     "id": "abc123",
     "deviceId": "esp32-room-01",
-    ...
+    "...": "..."
   }
 }
 ```
 
 ---
 
-## Project Structure
+## Project structure
 ```
 src/main/java/com/sleepsense/
 ├── SleepSenseApplication.java
+├── alert/
+│   ├── AlertDispatcher.java         ← sendAlert() interface (Test Plan ITC-01, STC-05)
+│   ├── AlertNotification.java
+│   └── FcmAlertDispatcher.java      ← one notification per critical factor
 ├── analysis/
-│   ├── ThresholdAnalyzer.java     ← Threshold-Based Analysis
-│   ├── EnvironmentClusterer.java  ← Data Clustering
+│   ├── ThresholdAnalyzer.java       ← threshold-based analysis, produces Alert rows
+│   ├── ThresholdChecker.java        ← checkThreshold() (Test Plan UTC-02)
+│   ├── ThresholdResult.java
+│   ├── FactorResult.java
+│   ├── ReportHelper.java            ← calculateDailyAverage() (Test Plan UTC-03)
+│   ├── DailyReport.java
+│   ├── EnvironmentClusterer.java    ← within-night quality label
+│   ├── PatternAnalyzer.java         ← k-means across nights (Test Plan STC-04)
+│   ├── PatternAnalysisResult.java
 │   └── MorningReportGenerator.java
 ├── config/
 │   ├── FirebaseConfig.java
 │   ├── CorsConfig.java
-│   └── ThresholdConfig.java      ← ปรับ threshold ได้ใน application.properties
+│   └── ThresholdConfig.java         ← tunable in application.properties
 ├── controller/
 │   ├── SensorController.java
 │   ├── MorningReportController.java
+│   ├── SmartSuggestionController.java
 │   ├── AlertController.java
+│   ├── ThresholdController.java
 │   └── GlobalExceptionHandler.java
 ├── dto/
 │   ├── SensorDataRequest.java
@@ -131,32 +158,58 @@ src/main/java/com/sleepsense/
 ├── model/
 │   ├── SensorData.java
 │   ├── Alert.java
-│   └── MorningReport.java
+│   ├── MorningReport.java
+│   └── ThresholdSettings.java
+├── pipeline/
+│   └── SensorPipeline.java          ← getSensorData → checkThreshold → sendAlert (ITC-01)
 ├── repository/
 │   ├── SensorDataRepository.java
-│   └── AlertRepository.java
+│   ├── AlertRepository.java
+│   └── ThresholdSettingsRepository.java
 └── service/
-    ├── SensorService.java
-    └── MorningReportService.java
+    ├── SensorService.java           ← getSensorData() (Test Plan UTC-01)
+    ├── MorningReportService.java
+    ├── SmartSuggestionService.java
+    ├── ThresholdSettingsService.java
+    └── DataCleanupService.java
 ```
 
 ---
 
-## Firestore Collections
-| Collection | คำอธิบาย |
-|------------|-----------|
-| `sensor_data` | raw sensor readings ทุก 30–60 วินาที |
-| `alerts` | alerts ที่เกิดจาก threshold analysis |
-| `morning_reports` | รายงานสรุปตอนเช้า |
+## Tests
+
+```
+mvn test
+```
+
+| Test class | Test Plan case |
+|------------|----------------|
+| `service/SensorServiceTest` | UTC-01 getSensorData |
+| `analysis/ThresholdCheckerTest` | UTC-02 checkThreshold |
+| `analysis/ReportHelperTest` | UTC-03 calculateDailyAverage |
+| `pipeline/SensorPipelineTest` | ITC-01 sensor pipeline, plus STC-05 TC-03 |
+| `analysis/PatternAnalyzerTest` | STC-04 clustering and smart suggestions |
+
+The matching client-side suite lives in the Flutter project under `test/`.
 
 ---
 
-## Threshold Defaults (ปรับได้ใน application.properties)
+## Firestore collections
+| Collection | Description |
+|------------|-------------|
+| `sensor_data` | raw sensor readings, every 30-60 seconds |
+| `alerts` | alerts raised by threshold analysis |
+| `morning_reports` | per-night summaries |
+| `threshold_settings` | per-device custom thresholds |
+
+---
+
+## Default thresholds (tunable in application.properties)
 | Factor | Warning | Critical |
 |--------|---------|----------|
 | CO₂ | 1000 ppm | 2000 ppm |
-| Temperature | <18 หรือ >26 °C | — |
-| Humidity | <40 หรือ >60 % | — |
+| Temperature | outside 18-26 °C | outside 15-32 °C |
+| Humidity | outside 30-60 % | outside 20-70 % |
 | PM2.5 | 35 µg/m³ | 75 µg/m³ |
-| Light | >50 lux | — |
+| Light | 50 lux | 200 lux |
 | Noise | 40 dB | 60 dB |

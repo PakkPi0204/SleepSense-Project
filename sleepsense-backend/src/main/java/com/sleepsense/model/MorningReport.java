@@ -9,7 +9,7 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * รายงานสรุปสภาพแวดล้อมในช่วงกลางคืน
+ * Summary of the bedroom environment over one night.
  */
 @Data
 @Builder
@@ -21,7 +21,7 @@ public class MorningReport {
     private Instant sleepStart;
     private Instant sleepEnd;
 
-    // ค่าเฉลี่ยตลอดคืน
+    // Averages across the whole night
     private double avgTemperature;
     private double avgHumidity;
     private double avgCo2;
@@ -29,20 +29,21 @@ public class MorningReport {
     private double avgLight;
     private double avgNoise;
 
-    // ค่าสูงสุด
+    // Peak values
     private double maxTemperature;
     private double maxCo2;
     private double maxPm25;
     private double maxNoise;
 
     // Motion summary
-    private int motionEventCount;   // จำนวนครั้งที่ตรวจจับการเคลื่อนไหว
+    private int motionEventCount;   // how many samples detected movement
     private String motionPattern;   // "LOW" | "MODERATE" | "HIGH"
 
-    // Cluster result (จาก Data Clustering)
+    // Cluster result (from the data clustering step)
     private String environmentCluster; // "GOOD" | "MODERATE" | "POOR"
 
-    // ความครบของข้อมูล (%) — เทียบจำนวนที่เก็บได้กับที่ควรได้ (กันกรณีอุปกรณ์ออฟไลน์บางช่วง)
+    // Data completeness (%) — samples collected vs. samples expected, so a
+    // device that was offline for part of the night is visible in the report
     private int dataCompleteness;
 
     // Abnormal periods detected

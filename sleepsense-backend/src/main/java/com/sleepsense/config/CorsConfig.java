@@ -17,8 +17,8 @@ public class CorsConfig {
     public CorsFilter corsFilter() {
         CorsConfiguration config = new CorsConfiguration();
         config.addAllowedOriginPattern(allowedOrigins);
-        config.addAllowedHeader("*");   // จำเป็นสำหรับ Content-Type ฯลฯ
-        // จำกัดเฉพาะ method ที่ระบบใช้จริง (ปลอดภัยกว่า allow ทั้งหมด)
+        config.addAllowedHeader("*");   // needed for Content-Type and friends
+        // Only the methods this system actually uses — safer than allowing all
         config.addAllowedMethod("GET");
         config.addAllowedMethod("POST");
         config.addAllowedMethod("PUT");

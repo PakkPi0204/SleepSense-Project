@@ -13,6 +13,7 @@ import '../../../../core/storage/suggestion_ack_store.dart';
 import '../../../../core/events/dashboard_refresh_bus.dart';
 import '../../../alerts/presentation/screens/alerts_screen.dart';
 import '../../../alerts/presentation/widgets/critical_alert_dialog.dart';
+import '../../../reports/presentation/screens/morning_report_history_screen.dart';
 import '../../data/dashboard_sample_data.dart';
 import '../../models/dashboard_models.dart';
 import '../widgets/environment_score_card.dart';
@@ -36,16 +37,17 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
   bool _loading = true;
   String? _error;
 
-  // เริ่มด้วย sample data — ถ้าโหลด API สำเร็จจะถูกแทนที่
+  // Start from sample data; a successful load replaces it.
   EnvironmentScore _score = sampleEnvironmentScore;
   List<SensorReading> _readings = sampleSensorReadings;
   PreSleepSuggestion _suggestion = samplePreSleepSuggestion;
   MorningReport _report = sampleMorningReport;
   List<AlertDto> _alerts = const [];
-  // เก็บ "factor" ของ critical alert ที่เด้ง popup ให้ดูแล้วใน session นี้ —
-  // กันไม่ให้เด้งซ้ำทุก 30 วิระหว่างที่ยังเปิดแอปอยู่ (ไม่ persist ข้าม session
-  // โดยตั้งใจ: สถานะที่ "persist ข้ามการปิด-เปิดแอป" จริงๆ คือสถานะ acknowledge
-  // ใน SuggestionAckStore ที่ผูกกับปุ่มใน dialog แทน)
+
+  // Factors whose critical popup has already been shown during this session, so
+  // it does not reappear every 30 seconds while the app stays open. Deliberately
+  // not persisted: the state that survives a restart is the acknowledgement in
+  // SuggestionAckStore, tied to the dialog's action button.
   final Set<String> _shownThisSessionFactors = {};
   bool _deviceOffline = false;
 
@@ -59,15 +61,15 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
       duration: const Duration(milliseconds: 900),
     )..repeat(reverse: true);
     _loadData();
-    // auto-refresh ทุก 30 วินาที (ตรงกับ ESP32)
+    // Auto-refresh every 30 seconds, matching the ESP32's posting interval.
     _autoRefresh = Timer.periodic(
       const Duration(seconds: 30),
       (_) => _loadData(silent: true),
     );
-    // ฟัง signal จากหน้าอื่น (เช่น กด Stop Monitoring ที่หน้า Sleep แล้วสร้าง
-    // morning report ใหม่สำเร็จ) เพื่อโหลดข้อมูลใหม่ทันที ไม่ต้องรอ
-    // auto-refresh รอบถัดไป (นานสุด 30 วิ) — จำเป็นเพราะ IndexedStack ทำให้
-    // หน้านี้ไม่ถูก dispose/initState ใหม่ตอนสลับแท็บ
+    // Listen for signals from other tabs — pressing Stop Monitoring on the Sleep
+    // screen generates a morning report, and this screen should show it at once
+    // rather than waiting up to 30 seconds. Necessary because IndexedStack means
+    // this screen is never disposed or re-initialised on a tab switch.
     DashboardRefreshBus.instance.listenable.addListener(_onExternalDataChanged);
   }
 
@@ -93,17 +95,18 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
       });
     }
 
-    // ยิงแต่ละ endpoint แยกกัน (ไม่ใช้ Future.wait ตรงๆ) — เดิมถ้า endpoint
-    // ไหน endpoint หนึ่ง throw (เช่น เน็ตสะดุดตอนดึง alerts พอดี) จะทำให้ทั้งชุด
-    // ไม่ถูกอัปเดตเลยแม้ endpoint อื่นจะสำเร็จ รวมถึง sensor/threshold ด้วย —
-    // นี่คือสาเหตุที่ dashboard ค้างค่า/threshold เก่า และดูเหมือนต้องปิดเปิด
-    // แอปใหม่ถึงจะ "บังเอิญ" เจอรอบที่ทุก endpoint สำเร็จพร้อมกันพอดี ตอนนี้
-    // แยกยิงเพื่อให้ endpoint ที่สำเร็จอัปเดตผลได้เสมอ ไม่ขึ้นกับ endpoint อื่น
-    // เริ่มยิงทั้ง 5 ตัวพร้อมกัน (ไม่ await ทีละตัว ไม่งั้นจะกลายเป็นยิงเรียง
-    // ต่อกันทีละ endpoint ช้าลง 5 เท่า) แล้วค่อย await ผลลัพธ์แต่ละตัวทีหลัง
-    // เก็บ future ดิบของ sensor/thresholds ไว้แยกจาก _safeCall เพื่อส่งต่อให้
-    // _fetchAlertsForHome ใช้ตอน fallback (ดูคอมเมนต์ด้านล่าง) — เรียก .then/
-    // await future ตัวเดิมซ้ำได้โดยไม่ยิง request ซ้ำ
+    // Each endpoint is called in isolation rather than through a single
+    // Future.wait. Previously one failure — a dropped connection while fetching
+    // alerts, say — discarded the whole batch including the sensor reading and
+    // thresholds. That was why the dashboard would sit on stale values and seem
+    // to need an app restart before it happened to catch a round where every
+    // endpoint succeeded at once.
+    //
+    // All five requests start together (awaiting them one at a time would make
+    // this five times slower), and are awaited afterwards. The raw sensor and
+    // threshold futures are kept separately from the _safeCall wrappers so
+    // _fetchAlertsForHome can reuse them on its fallback path — awaiting the
+    // same future twice does not issue a second request.
     final rawSensorFuture = _api.fetchLatestSensor();
     final rawThresholdsFuture =
         _api.fetchThresholds(deviceId: ApiConfig.deviceId);
@@ -112,13 +115,11 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
     final thresholdsFuture = _safeCall(() => rawThresholdsFuture);
     final suggestionsFuture = _safeCall(() => _api.fetchPreSleepSuggestions());
     final reportFuture = _safeCall(() => _api.fetchLatestReport());
-    // ใช้ /active แทน /recent สำหรับ badge หน้า Home + critical popup — คืน
-    // เฉพาะ alert ที่ backend เห็นว่ายัง active อยู่จริง (ยังไม่ resolved) ไม่ใช่
-    // ประวัติทั้งหมดที่รวมของเก่าที่ปัญหาหายไปแล้วด้วย ถ้า backend ยังเป็น
-    // เวอร์ชันเก่าที่ยังไม่มี endpoint นี้ (ยังไม่ได้ deploy) จะ 404/error แล้ว
-    // _fetchAlertsForHome จะ fallback ไปใช้ /recent + กรองเองฝั่ง client แทน
-    // โดยอัตโนมัติ ไม่ต้องรอ deploy backend ก็ demo ได้ตามปกติ พอ deploy เสร็จ
-    // เมื่อไหร่ก็จะสลับไปใช้ /active ที่แม่นกว่าเองทันทีโดยไม่ต้องแก้โค้ด
+    // /active rather than /recent for the Home badge and the critical popup: it
+    // returns only alerts the backend still considers active, not the whole
+    // history including problems that have since cleared. An older backend
+    // without that endpoint returns 404, and _fetchAlertsForHome falls back to
+    // /recent filtered client-side, so a demo works either way.
     final alertsFuture = _safeCall(
         () => _fetchAlertsForHome(rawSensorFuture, rawThresholdsFuture));
 
@@ -136,15 +137,15 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
         reportResult.error != null &&
         alertsResult.error != null;
 
-    // จำ factor ของ suggestion เดิมไว้ก่อน setState ทับค่า — ใช้เช็คว่า
-    // สภาพแวดล้อมเพิ่ง "กลับมาปกติ" รอบนี้หรือเปล่า (จากมีปัญหา -> OK)
+    // Remember the previous suggestion's factor before setState overwrites it,
+    // so we can tell whether conditions have just returned to normal.
     final previousSuggestionFactor = _suggestion.factorKey;
 
     setState(() {
       final sensor = sensorResult.value;
       if (sensor != null) {
-        // thresholds อาจเป็น null ถ้า endpoint นี้พังพอดีรอบนี้ — mapper จะ
-        // fallback ไปใช้ค่า default เอง ไม่ทำให้ sensor reading หายไปด้วย
+        // Thresholds may be null if that endpoint failed this round. The mapper
+        // falls back to the defaults rather than dropping the reading too.
         _readings = DashboardMapper.toSensorReadings(sensor,
             thresholds: thresholdsResult.value);
         _score = DashboardMapper.toEnvironmentScore(sensor,
@@ -152,7 +153,8 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
         _deviceOffline = DashboardMapper.isStale(sensor.timestamp);
       }
       if (suggestionsResult.value != null) {
-        _suggestion = DashboardMapper.toPreSleepSuggestion(suggestionsResult.value!);
+        _suggestion =
+            DashboardMapper.toPreSleepSuggestion(suggestionsResult.value!);
       }
       if (reportResult.value != null) {
         _report = DashboardMapper.toMorningReport(reportResult.value!);
@@ -160,25 +162,29 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
       if (alertsResult.value != null) {
         _alerts = alertsResult.value!;
       }
-      // โชว์ error banner ก็ต่อเมื่อทุก endpoint พังพร้อมกัน (backend ล่ม/ไม่ได้
-      // เชื่อมต่อจริงๆ) ถ้ามีอย่างน้อย 1 endpoint สำเร็จ ถือว่าอัปเดตได้ปกติ
+      // Only show the error banner when every endpoint failed, which means the
+      // backend really is unreachable. One success is enough to count as a
+      // working update.
       _error = allFailed
-          ? (sensorResult.error ?? thresholdsResult.error ?? 'เชื่อมต่อ backend ไม่ได้')
+          ? (sensorResult.error ??
+              thresholdsResult.error ??
+              'Could not reach the backend')
           : null;
       _loading = false;
     });
 
-    // สภาพแวดล้อมเพิ่งกลับมาปกติรอบนี้ (จากมีปัญหา -> OK) — เคลียร์สถานะ
-    // "จัดการแล้ว" ที่เคยบันทึกไว้ทั้งหมด เพื่อให้รอบหน้าที่ปัญหาเดิมเกิดซ้ำ
-    // ปุ่ม/popup จะกลับมาเตือนใหม่ตามปกติ แทนที่จะค้างสถานะ "เปิดแล้ว" ไปตลอด
+    // Conditions just went from a problem back to OK. Clear every stored
+    // acknowledgement so that the next time the same problem occurs the user is
+    // warned again, rather than the old "done" state lingering forever.
     if (previousSuggestionFactor != 'OK' && _suggestion.factorKey == 'OK') {
       SuggestionAckStore.instance.clearAll();
     }
 
-    // เช็ค critical alert ที่ยังไม่เคยถูก "รับทราบว่าจัดการแล้ว" แล้วบังคับเด้ง
-    // popup ให้ทุกครั้ง (รวมถึงตอนเพิ่งเปิดแอปใหม่ด้วย) — จะไม่เด้งซ้ำก็ต่อเมื่อ
-    // ผู้ใช้เคยกดปุ่ม action ใน dialog มาก่อนแล้วเท่านั้น (persist ข้ามการปิด-
-    // เปิดแอป ผ่าน SuggestionAckStore) ไม่ใช่แค่เคยเห็นแอปแล้วรอบหนึ่ง
+    // Check for critical alerts that have not been acknowledged and force the
+    // popup. This runs on every load, including the first one after launch. It
+    // stops reappearing only once the user has pressed the dialog's action
+    // button, which persists across restarts via SuggestionAckStore — merely
+    // having seen it once is not enough.
     if (alertsResult.value != null) {
       await _checkCriticalAlerts(
         alertsResult.value!,
@@ -188,7 +194,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
     }
   }
 
-  /// ห่อ future ทีละตัวไม่ให้ error ของ endpoint หนึ่งไปบล็อกผลของ endpoint อื่น
+  /// Wraps a single future so one endpoint's failure cannot block another's result.
   Future<_Result<T>> _safeCall<T>(Future<T> Function() call) async {
     try {
       return _Result<T>(value: await call());
@@ -197,12 +203,12 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
     }
   }
 
-  /// ดึง alert สำหรับหน้า Home — ลอง endpoint /active (backend เวอร์ชันใหม่)
-  /// ก่อน ถ้าพัง (404/error เพราะ backend ยังเป็นเวอร์ชันเก่าที่ยังไม่ได้
-  /// deploy โค้ด resolved) จะ fallback ไปดึง /recent (ประวัติทั้งหมด) มาแทน
-  /// แล้วกรองเองฝั่ง client: เอาแค่แถวล่าสุดของแต่ละ factor (recent เรียงใหม่
-  /// สุดก่อนอยู่แล้ว) แล้วเช็คว่ายังจริงอยู่ไหมกับ sensor/threshold ปัจจุบัน —
-  /// ให้ demo/ใช้งานได้ตามปกติแม้ backend ยังไม่ได้ redeploy
+  /// Fetch alerts for Home. Tries /active first. If that fails — a 404 from an
+  /// older backend that predates the resolved flag — it falls back to /recent
+  /// (the full history) and filters client-side: keep the newest row per factor
+  /// (/recent is already newest-first), then check each against the current
+  /// reading and thresholds. That keeps the app usable without redeploying the
+  /// backend.
   Future<List<AlertDto>> _fetchAlertsForHome(
     Future<SensorDataDto?> sensorFuture,
     Future<ThresholdSettingsDto> thresholdsFuture,
@@ -235,7 +241,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
       for (final a in recent) {
         final key = a.factor.toUpperCase();
         if (seenFactors.contains(key)) {
-          continue; // เอาแค่แถวล่าสุดของแต่ละ factor
+          continue; // newest row per factor only
         }
         seenFactors.add(key);
         if (sensor != null &&
@@ -283,7 +289,10 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
                     const SizedBox(height: 24),
                     _alertsSection(),
                     const SizedBox(height: 24),
-                    MorningReportCard(report: _report),
+                    MorningReportCard(
+                      report: _report,
+                      onTap: _openMorningReports,
+                    ),
                   ],
                 ),
               ),
@@ -294,16 +303,21 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
     );
   }
 
-  /// ตรวจ critical alert ทุกตัวที่ยังไม่ถูก "รับทราบว่าจัดการแล้ว" (ผูกกับ
-  /// factor เดิม ไม่ใช่ alert.id ที่เปลี่ยนใหม่ทุกรอบ sensor อัปเดต) แล้วบังคับ
-  /// เด้ง popup — ทำงานทุกครั้งที่โหลดข้อมูล รวมถึงตอนเพิ่งเปิดแอปใหม่ด้วย
+  /// Morning Reports live on their own screen now, reached from this card.
+  void _openMorningReports() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const MorningReportHistoryScreen()),
+    );
+  }
+
+  /// Force the popup for any critical alert that has not been acknowledged.
+  /// Acknowledgement is tied to the factor, not to alert.id, which changes on
+  /// every sensor update.
   ///
-  /// [sensor]/[thresholds] คือค่า "ปัจจุบัน" ของรอบโหลดนี้ — ใช้เช็คซ้ำว่า
-  /// alert แต่ละแถวยังวิกฤตอยู่จริงไหมก่อนบังคับเด้ง เพราะ backend เก็บ alert
-  /// เป็น log ประวัติศาสตร์ล้วนๆ ไม่มีสถานะ resolved/active (ดู
-  /// AlertRepository.findRecentByDevice ฝั่ง backend) ถ้าผู้ใช้เพิ่งปรับ
-  /// threshold ให้กว้างขึ้น แถวเก่าที่เคยวิกฤตภายใต้ threshold เดิมก็จะยังโผล่
-  /// มาใน "recent alerts" อยู่ดี ทั้งที่ค่าปัจจุบันไม่วิกฤตแล้ว
+  /// [sensor] and [thresholds] are this round's current values, used to re-check
+  /// that each alert is genuinely still critical before forcing a popup. Alert
+  /// rows are a historical log, so if the user has just widened a threshold, a
+  /// row that was critical under the old settings would otherwise still trigger.
   Future<void> _checkCriticalAlerts(
     List<AlertDto> alerts, {
     required SensorDataDto? sensor,
@@ -312,16 +326,13 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
     final criticals = alerts.where((a) => a.level == 'CRITICAL').toList();
     if (criticals.isEmpty) return;
 
-    // กรองให้เหลือแค่ "แถวล่าสุด 1 แถวต่อ 1 factor" ก่อนเสมอ — backend เก็บ
-    // alert เป็น log ประวัติศาสตร์ล้วนๆ (ไม่ resolved ชัดเจน) ดังนั้น factor
-    // เดียวกัน (เช่น TEMPERATURE) อาจมีหลายแถวพร้อมกันใน /active หรือ /recent
-    // (คนละค่า/คนละ threshold ที่บันทึกไว้ตอนนั้น เช่น ก่อน-หลังผู้ใช้ปรับ
-    // threshold ใน Settings) เดิมโค้ดไม่ได้กรองตรงนี้ อาศัยแค่สถานะ
-    // acknowledge/เคยเห็นแล้วมากันไม่ให้เด้งซ้ำ ซึ่งพังทันทีถ้ามีอะไรบายพาส
-    // การเช็คนั้น (เช่น debug flag "บังคับเด้ง Critical Popup") ทำให้ factor
-    // เดียวกันเด้ง popup ซ้อนกันหลายอันในรอบเดียว — กรองตรงนี้ไว้ก่อนเลยเพื่อ
-    // การันตีว่า 1 factor จะขึ้นได้อย่างมากแค่ popup เดียวต่อการเช็ค 1 ครั้ง
-    // ไม่ว่าปลายทางจะเช็ค ack/session อย่างไรต่อก็ตาม
+    // Reduce to the newest row per factor first. Because alerts are a log, the
+    // same factor can have several rows at once (different values, or different
+    // thresholds captured before and after a settings change). Filtering here
+    // guarantees at most one popup per factor per check, regardless of how the
+    // acknowledgement checks below turn out — previously this relied entirely on
+    // the acknowledgement state, which broke the moment anything bypassed it,
+    // such as the "always show critical popup" developer flag.
     final latestPerFactor = <String, AlertDto>{};
     for (final a in criticals) {
       final key = a.factor.toUpperCase();
@@ -341,10 +352,9 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
 
     final toShow = <AlertDto>[];
     for (final a in dedupedCriticals) {
-      // ถ้ามีค่า sensor ของรอบนี้ ให้เช็คซ้ำกับ threshold ปัจจุบันก่อน — ถ้า
-      // ไม่วิกฤตแล้ว (เช่น ผู้ใช้เพิ่งปรับ threshold ให้กว้างขึ้น) ข้ามแถวนี้ไป
-      // เลย ไม่ต้องบังคับเด้ง popup ของปัญหาที่ไม่ใช่ปัญหาอีกต่อไป ถ้าไม่มีค่า
-      // sensor รอบนี้ (endpoint พังพอดี) ให้เชื่อ backend ไปก่อนเหมือนเดิม
+      // With a reading for this round, re-check against the current thresholds.
+      // If it is no longer critical — the user widened the range — skip it. With
+      // no reading (that endpoint failed), trust the backend as before.
       if (sensor != null &&
           !DashboardMapper.isFactorCritical(a.factor, sensor,
               thresholds: thresholds)) {
@@ -352,10 +362,11 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
       }
 
       final factorKey = 'CRITICAL_${a.factor.toUpperCase()}';
-      // เด้งซ้ำได้ตามโหมดทดสอบเสมอ ไม่งั้นเช็คสถานะ acknowledge ที่ persist ไว้
+      // The developer flag always re-shows; otherwise check the persisted
+      // acknowledgement.
       final forceDebug = DebugFlags.alwaysShowCriticalOnLoad;
-      final alreadyAcked =
-          !forceDebug && await SuggestionAckStore.instance.isAcknowledged(factorKey);
+      final alreadyAcked = !forceDebug &&
+          await SuggestionAckStore.instance.isAcknowledged(factorKey);
       final alreadyShownThisSession =
           !forceDebug && _shownThisSessionFactors.contains(factorKey);
       if (!alreadyAcked && !alreadyShownThisSession) {
@@ -369,13 +380,13 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
     }
   }
 
-  /// เด้ง popup แจ้งเตือน critical ทีละอัน (ถ้ามีหลายอันเข้าคิวต่อกัน)
-  /// ผู้ใช้ต้องกดปุ่มใดปุ่มหนึ่งใน dialog เพื่อปิด — ไม่ปิดเองอัตโนมัติ (บังคับ
-  /// ให้เห็นจริงๆ ก่อนจะกลับไปใช้แอปต่อได้)
+  /// Show critical popups one at a time when several are queued. The user has to
+  /// press a button to dismiss each one — nothing closes on its own, so an alert
+  /// cannot be missed by looking away.
   Future<void> _showCriticalAlertQueue(List<AlertDto> alerts) async {
     for (final alert in alerts) {
       if (!mounted) return;
-      HapticFeedback.heavyImpact(); // สั่นแจ้งเตือน (บนมือถือ)
+      HapticFeedback.heavyImpact();
       await CriticalAlertDialog.show(
         context,
         alert,
@@ -390,12 +401,10 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
   }
 
   Widget _alertsSection() {
-    final criticalCount =
-        _alerts.where((a) => a.level == 'CRITICAL').length;
+    final criticalCount = _alerts.where((a) => a.level == 'CRITICAL').length;
     final hasAlerts = _alerts.isNotEmpty;
     const criticalColor = Color(0xFFE85D5D);
-    final accentColor =
-        criticalCount > 0 ? criticalColor : AppColors.accent;
+    final accentColor = criticalCount > 0 ? criticalColor : AppColors.accent;
 
     return GestureDetector(
       onTap: () {
@@ -406,7 +415,8 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
       child: Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
-          // มี critical: เติมพื้นหลังสีแดงจางๆ ทั้งการ์ดให้เด่นชัดกว่าแค่กรอบ
+          // With a critical alert present, tint the whole card rather than only
+          // the border, so it reads as urgent at a glance.
           color: criticalCount > 0
               ? criticalColor.withOpacity(0.12)
               : AppColors.card,
@@ -464,8 +474,8 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
                                 color: criticalColor.withOpacity(opacity),
                                 boxShadow: [
                                   BoxShadow(
-                                    color:
-                                        criticalColor.withOpacity(opacity * 0.6),
+                                    color: criticalColor
+                                        .withOpacity(opacity * 0.6),
                                     blurRadius: 6,
                                     spreadRadius: 1,
                                   ),
@@ -480,23 +490,24 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
                   const SizedBox(height: 4),
                   Text(
                     hasAlerts
-                        ? 'มี ${_alerts.length} การแจ้งเตือน'
-                            '${criticalCount > 0 ? ' ($criticalCount วิกฤต)' : ''}'
-                        : 'ไม่มีการแจ้งเตือน',
+                        ? '${_alerts.length} alert'
+                            '${_alerts.length == 1 ? '' : 's'}'
+                            '${criticalCount > 0 ? ' ($criticalCount critical)' : ''}'
+                        : 'No alerts',
                     style: TextStyle(
                       color: criticalCount > 0
                           ? criticalColor
                           : AppColors.neutral,
                       fontSize: 13,
-                      fontWeight:
-                          criticalCount > 0 ? FontWeight.w600 : FontWeight.normal,
+                      fontWeight: criticalCount > 0
+                          ? FontWeight.w600
+                          : FontWeight.normal,
                     ),
                   ),
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right,
-                color: AppColors.neutral, size: 22),
+            const Icon(Icons.chevron_right, color: AppColors.neutral, size: 22),
           ],
         ),
       ),
@@ -512,6 +523,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
     );
   }
 
+  /// STC-01 TC-03: the device is not sending data.
   Widget _buildOfflineBanner() {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -521,14 +533,15 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.accent),
       ),
-      child: Row(
+      child: const Row(
         children: [
-          const Icon(Icons.sensors_off, color: AppColors.accent, size: 20),
-          const SizedBox(width: 10),
+          Icon(Icons.sensors_off, color: AppColors.accent, size: 20),
+          SizedBox(width: 10),
           Expanded(
             child: Text(
-              'อุปกรณ์อาจออฟไลน์ — ไม่ได้รับข้อมูลใหม่เกิน 2 นาที\nค่าที่แสดงอาจไม่ใช่ค่าปัจจุบัน',
-              style: const TextStyle(color: AppColors.neutral, fontSize: 12),
+              'Device is not connected. Please check the IoT device.\n'
+              'No new data for over 2 minutes — the values below may be stale.',
+              style: TextStyle(color: AppColors.neutral, fontSize: 12),
             ),
           ),
         ],
@@ -544,14 +557,15 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.accent),
       ),
-      child: Row(
+      child: const Row(
         children: [
-          const Icon(Icons.wifi_off, color: AppColors.accent, size: 20),
-          const SizedBox(width: 10),
+          Icon(Icons.wifi_off, color: AppColors.accent, size: 20),
+          SizedBox(width: 10),
           Expanded(
             child: Text(
-              'ยังไม่ได้เชื่อมต่อ backend — กำลังแสดงข้อมูลตัวอย่าง\n(ดึงลงเพื่อลองใหม่)',
-              style: const TextStyle(color: AppColors.neutral, fontSize: 12),
+              'Not connected to the backend — showing sample data\n'
+              '(pull to retry)',
+              style: TextStyle(color: AppColors.neutral, fontSize: 12),
             ),
           ),
         ],
@@ -560,8 +574,8 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen>
   }
 }
 
-/// ผลลัพธ์ของการยิง endpoint หนึ่งตัวแบบ isolated — ใส่ error ไว้แยกจาก value
-/// เพื่อไม่ให้ endpoint หนึ่งพังแล้วดึงอีก endpoint ที่สำเร็จตกไปด้วย
+/// The result of one isolated endpoint call, keeping the error apart from the
+/// value so a single failure cannot take a successful sibling down with it.
 class _Result<T> {
   final T? value;
   final String? error;

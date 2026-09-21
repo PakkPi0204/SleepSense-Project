@@ -12,11 +12,12 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 /**
- * ลบข้อมูลเก่าอัตโนมัติ
- * - sensor_data และ alerts ที่เก่ากว่า X วัน จะถูกลบทิ้ง
- * - รันอัตโนมัติทุกวันตอนตี 3 (ต้องเปิด backend ค้างไว้)
+ * Automatic cleanup of old data.
+ * - sensor_data and alerts older than the retention window are deleted
+ * - runs every day at 03:00 (the backend has to stay up for this)
  *
- * morning_reports ไม่ถูกลบอัตโนมัติ (เก็บเป็นสถิติ ลบเองผ่าน API)
+ * morning_reports are never deleted automatically — they are the user's
+ * history, and are removed individually through the API instead.
  */
 @Slf4j
 @Service
@@ -29,23 +30,23 @@ public class DataCleanupService {
     private int batchSize;
 
     /**
-     * รันทุกวันเวลา 03:00 น. (cron: วินาที นาที ชั่วโมง วัน เดือน วันในสัปดาห์)
+     * Runs daily at 03:00 (cron fields: second minute hour day month weekday).
      */
     @Scheduled(cron = "0 0 3 * * *")
     public void cleanupOldData() {
         long cutoff = Instant.now().minus(retentionDays, ChronoUnit.DAYS).toEpochMilli();
-        log.info("เริ่มลบข้อมูลเก่ากว่า {} วัน (ก่อน timestamp {})", retentionDays, cutoff);
+        log.info("Deleting data older than {} days (before timestamp {})", retentionDays, cutoff);
 
         int deletedSensor = deleteOlderThan("sensor_data", cutoff);
         int deletedAlerts = deleteOlderThan("alerts", cutoff);
 
-        log.info("ลบข้อมูลเสร็จ: sensor_data={} รายการ, alerts={} รายการ",
+        log.info("Cleanup finished: sensor_data={} documents, alerts={} documents",
                 deletedSensor, deletedAlerts);
     }
 
     /**
-     * ลบ document ใน collection ที่ timestamp เก่ากว่า cutoff
-     * ลบทีละ batch เพื่อไม่ให้หนักเกินไป
+     * Delete documents in a collection whose timestamp is older than the cutoff,
+     * one batch at a time so a large backlog does not overwhelm Firestore.
      */
     private int deleteOlderThan(String collection, long cutoff) {
         Firestore db = FirestoreClient.getFirestore();
@@ -69,11 +70,11 @@ public class DataCleanupService {
 
                 totalDeleted += docs.size();
 
-                // ถ้าได้น้อยกว่า batch size แปลว่าหมดแล้ว
+                // A short page means there is nothing left to delete.
                 if (docs.size() < batchSize) break;
             }
         } catch (Exception e) {
-            log.error("ลบข้อมูล collection {} ล้มเหลว", collection, e);
+            log.error("Failed to clean up collection {}", collection, e);
         }
 
         return totalDeleted;
