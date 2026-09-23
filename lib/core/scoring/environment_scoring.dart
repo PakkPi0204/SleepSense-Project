@@ -1,30 +1,30 @@
 import '../network/api_models.dart';
 
-/// สูตรคิดคะแนน "สภาพแวดล้อมการนอน" แบบเดียว ใช้ร่วมกันทั้งหน้า Home
-/// (Sleep Environment Score) และหน้า Sleep (Sleep Readiness) เพื่อไม่ให้
-/// สองหน้าคิดคะแนนคนละสูตรแล้วโชว์ตัวเลขไม่ตรงกันสำหรับ sensor ชุดเดียวกัน
+/// The single sleep-environment scoring formula, shared by Home (Sleep
+/// Environment Score) and Sleep (Sleep Readiness), so the two screens cannot
+/// show different numbers for the same reading.
 ///
-/// เดิม DashboardMapper ใช้สูตร "หัก" (เริ่ม 100 แล้วลบทีละก้อนตาม
-/// warning/critical ที่โดน) ส่วน SleepMapper ใช้สูตร "ไล่เชิงเส้น" (100 เมื่อ
-/// optimal ไล่ลงเป็นเส้นตรงจนถึง 0 ที่ critical) — สองสูตรนี้ให้ผลไม่ตรงกัน
-/// แม้จะใช้ threshold ชุดเดียวกัน จึงรวมเป็นสูตรเดียวที่นี่ (แบบไล่เชิงเส้น)
-/// แล้วให้ทั้งสอง mapper เรียกใช้ฟังก์ชันนี้แทนการคำนวณเอง
+/// DashboardMapper used to deduct points (start at 100, subtract a chunk per
+/// warning or critical), while SleepMapper scaled linearly (100 while optimal,
+/// down to 0 at critical). The two disagreed even on identical thresholds, so
+/// they are merged here into the linear formula and both mappers call it.
 class EnvironmentScoring {
   EnvironmentScoring._();
 
-  /// คะแนนของค่าที่ "ยิ่งสูงยิ่งแย่ทางเดียว" (CO2 / PM2.5 / Light / Noise)
-  /// อยู่ในช่วง optimal (<= warning) = 100 เต็ม ไล่ลงเป็นเส้นตรงจนถึง 0 ที่
-  /// ค่า critical แล้วค้างที่ 0 ต่อจากนั้น
+  /// Score for values that only get worse in one direction (CO2 / PM2.5 / Light /
+  /// Noise): a full 100 while at or below the warning level, falling linearly to
+  /// 0 at the critical level and staying there.
   static double upperScore(double v, double warning, double critical) {
     if (v <= warning) return 100;
-    if (critical <= warning) return 0; // กัน config ผิดพลาดหารด้วย 0
+    if (critical <= warning) return 0; // guards against divide-by-zero on bad config
     if (v >= critical) return 0;
     final ratio = (v - warning) / (critical - warning);
     return (100 * (1 - ratio)).clamp(0, 100);
   }
 
-  /// คะแนนของค่าที่มีทั้งขอบล่าง-บน (Temperature / Humidity) — อยู่ในช่วง
-  /// [min, max] = 100 เต็ม ไล่ลงเป็นเส้นตรงจนถึง 0 ที่ขอบ critical ฝั่งนั้นๆ
+  /// Score for values with both a lower and an upper bound (Temperature /
+  /// Humidity): 100 inside [min, max], falling linearly to 0 at whichever
+  /// critical bound it is heading towards.
   static double rangeScore(
       double v, double min, double max, double criticalMin, double criticalMax) {
     if (v >= min && v <= max) return 100;
@@ -40,9 +40,9 @@ class EnvironmentScoring {
     return (100 * (1 - ratio)).clamp(0, 100);
   }
 
-  /// คำนวณคะแนนย่อยทั้ง 4 หมวด (Room / Air / Light / Sound) + คะแนนรวม จาก
-  /// ค่า sensor เดียว โดยอิงตาม threshold ของผู้ใช้ (หรือ default ถ้าไม่ส่งมา)
-  /// — เรียกจากทั้ง DashboardMapper และ SleepMapper เพื่อให้ผลตรงกันเป๊ะเสมอ
+  /// The four sub-scores (Room / Air / Light / Sound) plus an overall score for
+  /// one reading, against the user's thresholds (or the defaults when none are
+  /// supplied). Called from both DashboardMapper and SleepMapper.
   static EnvironmentFactorScores factorScores(
     SensorDataDto d, {
     ThresholdSettingsDto? thresholds,
@@ -67,8 +67,8 @@ class EnvironmentScoring {
     final noiseWarning = thresholds?.noiseWarning ?? 40;
     final noiseCritical = thresholds?.noiseCritical ?? 60;
 
-    // ค่าที่ไม่มี sensor ต่ออยู่ (ติดลบ/0 ตาม convention ของ backend) ไม่ควร
-    // ลากคะแนนรวมตก จึงถือว่า sensor นั้น "เต็ม 100" แทนการเอาไปคิดรวม
+    // A disconnected sensor (negative or zero, by the backend's convention)
+    // should not drag the overall score down, so it scores a full 100 instead.
     final room = ((_scoreOrFull(d.temperature,
                 () => rangeScore(d.temperature, tempMin, tempMax,
                     tempCriticalMin, tempCriticalMax),
@@ -102,8 +102,8 @@ class EnvironmentScoring {
     return isMissing ? 100 : score();
   }
 
-  /// ข้อความสถานะจากคะแนนรวม — ใช้ค่าเดียวกันทั้ง Environment Score และ
-  /// Sleep Readiness (>=80 Good, >=50 Moderate, ต่ำกว่านั้น Poor)
+  /// Status text from the overall score — the same cut-offs for both Environment
+  /// Score and Sleep Readiness (>=80 Good, >=50 Moderate, below that Poor).
   static String statusFor(int overall) {
     if (overall >= 80) return 'Good';
     if (overall >= 50) return 'Moderate';
@@ -111,7 +111,7 @@ class EnvironmentScoring {
   }
 }
 
-/// ผลลัพธ์คะแนนย่อย 4 หมวด + คะแนนรวม จาก [EnvironmentScoring.factorScores]
+/// The four sub-scores plus the overall, as returned by [EnvironmentScoring.factorScores].
 class EnvironmentFactorScores {
   final double room;
   final double air;

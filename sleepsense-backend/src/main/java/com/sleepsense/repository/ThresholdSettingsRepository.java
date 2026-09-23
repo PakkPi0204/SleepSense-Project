@@ -23,7 +23,7 @@ public class ThresholdSettingsRepository {
         return FirestoreClient.getFirestore();
     }
 
-    /** ใช้ deviceId เป็น document id โดยตรง (1 device = 1 การตั้งค่า) */
+    /** The deviceId is the document id — one device, one settings document. */
     public Optional<ThresholdSettings> findByDeviceId(String deviceId)
             throws ExecutionException, InterruptedException {
         DocumentSnapshot doc = db().collection(COLLECTION).document(deviceId).get().get();

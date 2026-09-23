@@ -3,17 +3,17 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/network/api_service.dart';
 import '../../../../core/network/api_models.dart';
+import '../../../../shared/utils/english_text.dart';
 import '../../../../shared/utils/time_format.dart';
 
 const _criticalColor = Color(0xFFE85D5D);
 
-/// หน้าแสดงประวัติ Alert จาก backend (/api/alerts/recent)
+/// Alert history from the backend (/api/alerts/recent).
 ///
-/// ปรับปรุงให้ "ดูเตือน" ชัดเจนขึ้นกว่าเดิม:
-///  - เรียงลำดับ CRITICAL ขึ้นก่อนเสมอ แล้วค่อยเรียงตามเวลาล่าสุด
-///  - การ์ด CRITICAL ใช้พื้นหลังสีแดงเข้ม (ไม่ใช่แค่กรอบสี) ให้เด่นชัด
-///  - มีแถบสรุปจำนวน CRITICAL/WARNING ด้านบนสุด พร้อมจุดกระพริบเมื่อมี CRITICAL
-///  - แสดงเวลาแบบ relative ("5 นาทีที่แล้ว") ให้รู้ว่าใหม่แค่ไหน
+///  - CRITICAL entries always sort first, then by most recent
+///  - a CRITICAL card is filled red rather than merely outlined
+///  - a summary bar at the top counts CRITICAL and WARNING, with a pulsing dot
+///  - times are relative ("5 min ago") so it is obvious how fresh an alert is
 class AlertsScreen extends StatefulWidget {
   const AlertsScreen({super.key});
 
@@ -55,7 +55,7 @@ class _AlertsScreenState extends State<AlertsScreen>
     });
     try {
       final alerts = await _api.fetchRecentAlerts(limit: 30);
-      // CRITICAL ขึ้นก่อนเสมอ, ในระดับเดียวกันเรียงใหม่สุดก่อน
+      // CRITICAL first; within a level, newest first.
       final sorted = [...alerts]..sort((a, b) {
           if (a.isCritical != b.isCritical) {
             return a.isCritical ? -1 : 1;
@@ -106,7 +106,7 @@ class _AlertsScreenState extends State<AlertsScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'การแจ้งเตือนสภาพแวดล้อมล่าสุด',
+                      'Recent room condition alerts',
                       style: TextStyle(color: AppColors.neutral, fontSize: 14),
                     ),
                     if (!_loading && _error == null && _alerts.isNotEmpty) ...[
@@ -137,7 +137,7 @@ class _AlertsScreenState extends State<AlertsScreen>
     );
   }
 
-  /// แถบสรุปด้านบน — เห็นภาพรวมทันทีโดยไม่ต้องไล่อ่านทีละการ์ด
+  /// Summary bar — the overall picture without reading every card.
   Widget _summaryBar(int criticalCount, int warningCount) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -157,7 +157,7 @@ class _AlertsScreenState extends State<AlertsScreen>
             _PulsingDot(controller: _pulseController, color: _criticalColor),
             const SizedBox(width: 10),
             Text(
-              '$criticalCount วิกฤต',
+              '$criticalCount critical',
               style: const TextStyle(
                 color: _criticalColor,
                 fontWeight: FontWeight.bold,
@@ -168,7 +168,7 @@ class _AlertsScreenState extends State<AlertsScreen>
           ],
           if (warningCount > 0)
             Text(
-              '$warningCount คำเตือน',
+              '$warningCount warning',
               style: const TextStyle(
                 color: AppColors.accent,
                 fontWeight: FontWeight.w600,
@@ -189,7 +189,7 @@ class _AlertsScreenState extends State<AlertsScreen>
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        // CRITICAL: เติมพื้นหลังสีแดงเข้มทั้งการ์ดให้เด่นชัด ไม่ใช่แค่กรอบ
+        // CRITICAL: fill the whole card red, not just the border.
         color: isCritical ? accent.withOpacity(0.14) : AppColors.card,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
@@ -258,7 +258,13 @@ class _AlertsScreenState extends State<AlertsScreen>
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  a.message,
+                  englishAlertMessage(
+                    message: a.message,
+                    level: a.level,
+                    factor: a.factor,
+                    value: a.value,
+                    threshold: a.threshold,
+                  ),
                   style: TextStyle(
                     color: AppColors.white,
                     fontSize: 14,
@@ -289,7 +295,7 @@ class _AlertsScreenState extends State<AlertsScreen>
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'โหลด alerts ไม่ได้ — เชื่อมต่อ backend ไม่สำเร็จ\n(ดึงลงเพื่อลองใหม่)',
+              'Could not load alerts — the backend is unreachable\n(pull to retry)',
               style: const TextStyle(color: AppColors.neutral, fontSize: 12),
             ),
           ),
@@ -308,7 +314,7 @@ class _AlertsScreenState extends State<AlertsScreen>
               color: AppColors.secondary, size: 48),
           SizedBox(height: 12),
           Text(
-            'ไม่มีการแจ้งเตือน\nสภาพแวดล้อมอยู่ในเกณฑ์ปกติ',
+            'No alerts\nYour room conditions are within range',
             textAlign: TextAlign.center,
             style: TextStyle(color: AppColors.neutral, fontSize: 14, height: 1.5),
           ),
@@ -318,7 +324,7 @@ class _AlertsScreenState extends State<AlertsScreen>
   }
 }
 
-/// จุดกลมกระพริบ (pulsing dot) ใช้ดึงความสนใจตอนมี CRITICAL alert
+/// A pulsing dot, used to draw attention when a CRITICAL alert is present.
 class _PulsingDot extends StatelessWidget {
   final AnimationController controller;
   final Color color;

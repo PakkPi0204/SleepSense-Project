@@ -18,8 +18,9 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * จัดการ threshold ที่ผู้ใช้ปรับเองต่อ device — ทับค่า default จาก ThresholdConfig
- * เผื่อบางคนต้องนอนห้องเย็นกว่าปกติ ไวต่อฝุ่น/เสียงมากกว่าค่าเฉลี่ยทั่วไป ฯลฯ
+ * Manages per-device custom thresholds, overriding the defaults in
+ * ThresholdConfig for people who need a cooler room, or who are more
+ * sensitive to dust or noise than average.
  */
 @Slf4j
 @Service
@@ -32,16 +33,16 @@ public class ThresholdSettingsService {
     private final AlertRepository alertRepo;
     private final ThresholdAnalyzer analyzer;
 
-    /** กันสร้าง alert ซ้ำถ้าผู้ใช้กด save ติดกันหลายครั้งในช่วงสั้นๆ */
+    /** Stops duplicate alerts when the user saves several times in quick succession. */
     private static final long DEDUPE_WINDOW_SECONDS = 15;
 
-    /** ค่า threshold ที่ "ใช้งานจริง" ของ device นี้ — custom ถ้ามี ไม่งั้นใช้ default */
+    /** This device's effective thresholds — custom if any, otherwise the defaults. */
     public ThresholdConfig getEffective(String deviceId) {
         Optional<ThresholdSettings> custom = safeFind(deviceId);
         return custom.map(this::merge).orElse(defaults);
     }
 
-    /** ค่าสำหรับแสดงในหน้าตั้งค่า — คืนค่า default (พร้อม flag customized=false) ถ้ายังไม่เคยตั้งเอง */
+    /** Values for the settings screen — the defaults with customized=false when nothing was saved. */
     public ThresholdSettings getSettingsOrDefault(String deviceId) {
         return safeFind(deviceId).orElseGet(() -> fromDefaults(deviceId));
     }
@@ -58,20 +59,20 @@ public class ThresholdSettingsService {
         }
         ThresholdSettings saved = getSettingsOrDefault(deviceId);
 
-        // เดิม: alert จะถูกสร้างเฉพาะตอน ESP32 ส่งข้อมูลใหม่เข้ามาเท่านั้น (ดู
-        // SensorService.ingest()) แปลว่าถ้าผู้ใช้ปรับ threshold ให้เข้มขึ้นแล้ว
-        // ค่าปัจจุบันในห้องเข้าเกณฑ์วิกฤตพอดี จะไม่มี alert/popup ใดๆ จนกว่า
-        // sensor รอบถัดไปจะส่งเข้ามา (อาจอีก 30+ วิ) — เช็คค่าล่าสุดที่มีอยู่แล้ว
-        // ทันทีตรงนี้ เพื่อให้การปรับ threshold รู้สึก "real time" จริงๆ
+        // Alerts used to be raised only when the ESP32 posted a new reading (see
+        // SensorService.ingest()), so tightening a threshold when the room was
+        // already past the new critical point produced no alert until the next
+        // sample arrived, up to 30 seconds later. Re-checking the latest stored
+        // reading right here makes a threshold change feel immediate.
         reEvaluateLatestReading(deviceId, merge(saved));
 
         return saved;
     }
 
     /**
-     * เช็คค่า sensor ล่าสุดที่มีอยู่ในระบบกับ threshold ใหม่ทันทีหลัง save —
-     * ถ้าเข้าเกณฑ์ warning/critical จะสร้าง alert ใหม่เลย ไม่ต้องรอรอบถัดไปของ
-     * ESP32 ความล้มเหลวตรงนี้ไม่ควรทำให้การบันทึก threshold ล้มเหลวไปด้วย
+     * Re-evaluate the most recent stored reading against the new thresholds
+     * immediately after a save, raising an alert without waiting for the next
+     * ESP32 round. A failure here must not fail the threshold save itself.
      */
     private void reEvaluateLatestReading(String deviceId, ThresholdConfig effective) {
         try {
@@ -101,7 +102,7 @@ public class ThresholdSettingsService {
         }
     }
 
-    /** รีเซ็ตกลับไปใช้ค่า default ของระบบ */
+    /** Reset this device back to the system defaults. */
     public ThresholdSettings resetToDefault(String deviceId) {
         try {
             repo.delete(deviceId);
@@ -172,32 +173,32 @@ public class ThresholdSettingsService {
     }
 
     /**
-     * กันผู้ใช้ตั้งค่าพัง เช่น warning มากกว่า critical หรือ min มากกว่า max
-     * ค่าที่เป็น null (ไม่ได้ส่งมา) จะข้ามการเช็ค แล้วไปใช้ default ตอน merge
+     * Reject nonsensical settings such as warning above critical, or min above
+     * max. Fields left null are skipped here and filled from the defaults on merge.
      */
     private void validate(ThresholdSettings s) {
         requireOrder(s.getTemperatureCriticalMin(), s.getTemperatureMin(),
-                "Temperature critical-min ต้องน้อยกว่า min");
+                "Temperature critical-min must be lower than min");
         requireOrder(s.getTemperatureMin(), s.getTemperatureMax(),
-                "Temperature min ต้องน้อยกว่า max");
+                "Temperature min must be lower than max");
         requireOrder(s.getTemperatureMax(), s.getTemperatureCriticalMax(),
-                "Temperature max ต้องน้อยกว่า critical-max");
+                "Temperature max must be lower than critical-max");
 
         requireOrder(s.getHumidityCriticalMin(), s.getHumidityMin(),
-                "Humidity critical-min ต้องน้อยกว่า min");
+                "Humidity critical-min must be lower than min");
         requireOrder(s.getHumidityMin(), s.getHumidityMax(),
-                "Humidity min ต้องน้อยกว่า max");
+                "Humidity min must be lower than max");
         requireOrder(s.getHumidityMax(), s.getHumidityCriticalMax(),
-                "Humidity max ต้องน้อยกว่า critical-max");
+                "Humidity max must be lower than critical-max");
 
         requireOrder(s.getCo2Warning(), s.getCo2Critical(),
-                "CO2 warning ต้องน้อยกว่า critical");
+                "CO2 warning must be lower than critical");
         requireOrder(s.getPm25Warning(), s.getPm25Critical(),
-                "PM2.5 warning ต้องน้อยกว่า critical");
+                "PM2.5 warning must be lower than critical");
         requireOrder(s.getNoiseWarning(), s.getNoiseCritical(),
-                "Noise warning ต้องน้อยกว่า critical");
+                "Noise warning must be lower than critical");
         requireOrder(s.getLightMax(), s.getLightCritical(),
-                "Light max ต้องน้อยกว่า critical");
+                "Light max must be lower than critical");
     }
 
     private void requireOrder(Double smaller, Double larger, String message) {

@@ -4,15 +4,14 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/network/api_models.dart';
 import '../../../../core/storage/suggestion_ack_store.dart';
 
-/// เนื้อหาเฉพาะของแต่ละ factor (ไอคอน, ชื่อที่แสดง, หน่วย, คำแนะนำ, ปุ่ม action)
-/// ใช้ทั้งใน dialog นี้และที่อื่นได้ถ้าต้องการ
+/// Per-factor content: icon, display name, unit, advice and action button label.
 class _FactorInfo {
   final IconData icon;
-  final String label; // เช่น "CO₂", "Temperature"
+  final String label; // e.g. "CO₂", "Temperature"
   final String unit;
-  final String verb; // เช่น "is critically high"
+  final String verb; // e.g. "is critically high"
   final String suggestion;
-  final String actionLabel; // ข้อความปุ่ม action สั้นๆ เช่น "Turn on fan/AC"
+  final String actionLabel; // short action button text, e.g. "Turn on fan/AC"
 
   const _FactorInfo({
     required this.icon,
@@ -87,8 +86,8 @@ _FactorInfo _infoFor(String factor) =>
       actionLabel: "I've handled it",
     );
 
-/// Popup แจ้งเตือน critical alert แบบเต็มจอ (modal)
-/// เรียกผ่าน [CriticalAlertDialog.show]
+/// Modal popup for a critical alert.
+/// Show it via [CriticalAlertDialog.show].
 class CriticalAlertDialog extends StatelessWidget {
   final AlertDto alert;
   final VoidCallback? onViewRoomStatus;
@@ -101,7 +100,8 @@ class CriticalAlertDialog extends StatelessWidget {
 
   static const _critical = Color(0xFFE85D5D);
 
-  /// แสดง dialog — กันปิดโดยการแตะข้างนอก (ต้องกดปุ่มใดปุ่มหนึ่งด้านล่างเท่านั้น)
+  /// Shows the dialog. Tapping outside will not dismiss it — one of the buttons
+  /// below has to be pressed.
   static Future<void> show(
     BuildContext context,
     AlertDto alert, {
@@ -267,10 +267,11 @@ class CriticalAlertDialog extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 20),
-              // ปุ่มหลัก: กดเพื่อ "รับทราบว่าจัดการแล้ว" — สถานะนี้ถูกบันทึกลง
-              // local storage ผูกกับ factor นี้ (ไม่ใช่ id ของ alert ที่เปลี่ยน
-              // ทุกรอบ) ดังนั้นแม้ผู้ใช้จะปิดแอปแล้วเปิดใหม่ ระบบจะไม่บังคับเด้ง
-              // popup นี้ซ้ำอีก จนกว่าปัญหานี้จะหายไปแล้วเกิดขึ้นใหม่อีกรอบ
+              // Primary button: acknowledges that the user has dealt with it.
+              // The acknowledgement is stored locally against this factor, not
+              // against the alert id (which changes every round), so restarting
+              // the app will not force this popup again until the problem clears
+              // and then recurs.
               SizedBox(
                 width: double.infinity,
                 height: 48,

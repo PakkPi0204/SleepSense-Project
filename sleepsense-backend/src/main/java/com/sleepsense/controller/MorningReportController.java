@@ -19,7 +19,7 @@ public class MorningReportController {
 
     /**
      * POST /api/report/generate?deviceId=xxx&sleepStart=...&sleepEnd=...
-     * Flutter app เรียกตอนผู้ใช้กด "ดูรายงาน" หลังตื่นนอน
+     * Called by the Flutter app when the user stops monitoring in the morning.
      */
     @PostMapping("/generate")
     public ResponseEntity<ApiResponse<MorningReport>> generate(
@@ -37,7 +37,7 @@ public class MorningReportController {
 
     /**
      * GET /api/report/latest?deviceId=xxx
-     * ดึง morning report ล่าสุด
+     * Fetch the most recent morning report.
      */
     @GetMapping("/latest")
     public ResponseEntity<ApiResponse<MorningReport>> getLatest(@RequestParam String deviceId) {
@@ -48,7 +48,7 @@ public class MorningReportController {
 
     /**
      * GET /api/report/history?deviceId=xxx&limit=30
-     * ดึง morning report ย้อนหลังหลายคืน (สำหรับหน้า Stats)
+     * Fetch several nights of morning reports (used by the Morning Report history).
      */
     @GetMapping("/history")
     public ResponseEntity<ApiResponse<java.util.List<MorningReport>>> getHistory(
@@ -60,7 +60,7 @@ public class MorningReportController {
 
     /**
      * DELETE /api/report/{reportId}
-     * ลบ morning report ทีละรายการ (สำหรับปุ่มลบในแอป)
+     * Delete a single morning report (the delete action in the app).
      */
     @DeleteMapping("/{reportId}")
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable String reportId) {

@@ -28,16 +28,16 @@ public class AlertRepository {
         doc.put("value",     alert.getValue());
         doc.put("threshold", alert.getThreshold());
         doc.put("timestamp", alert.getTimestamp().toEpochMilli());
-        doc.put("resolved",  alert.isResolved()); // false ตามค่า default ของ Alert ใหม่
+        doc.put("resolved",  alert.isResolved()); // false by default for a new Alert
 
         ApiFuture<DocumentReference> future = db().collection(COLLECTION).add(doc);
         return future.get().getId();
     }
 
     /**
-     * ปิด (resolve) alert แถวนี้ — เรียกตอน SensorService พบว่ารอบวิเคราะห์
-     * ล่าสุด factor ของ alert นี้กลับมาอยู่ในช่วงปกติแล้ว (ไม่ WARNING/CRITICAL
-     * อีกต่อไปภายใต้ threshold ปัจจุบัน)
+     * Resolve this alert row. Called when SensorService finds that the latest
+     * analysis pass no longer flags this factor as WARNING or CRITICAL under the
+     * current thresholds.
      */
     public void resolve(String alertId) throws ExecutionException, InterruptedException {
         Map<String, Object> updates = new HashMap<>();
@@ -63,15 +63,15 @@ public class AlertRepository {
     }
 
     /**
-     * alert ที่ยัง "active" อยู่จริง (resolved == false) ของ device นี้ ไม่จำกัด
-     * แค่ factor เดียว — ใช้ตัดสินว่าจะสร้างแถวใหม่ซ้ำไหม (ถ้า factor เดิม
-     * ระดับเดิม active อยู่แล้ว) และใช้เทียบว่า factor ไหนควรถูก resolve ไปเพราะ
-     * ค่ากลับมาปกติแล้ว
+     * Every alert for this device that is still active (resolved == false),
+     * across all factors. Used to decide whether a new row is needed (an
+     * unchanged factor at an unchanged level does not need one) and to work out
+     * which factors should now be resolved because the value came back to normal.
      *
-     * ตั้งใจไม่ใช้ whereEqualTo("resolved", false) ตรงๆ ในตัว query (จะต้อง
-     * สร้าง composite index ใหม่ใน Firestore ร่วมกับ deviceId) แต่ดึงตาม
-     * deviceId + orderBy timestamp แบบเดียวกับ findRecentByDevice (index เดิม
-     * ที่มีอยู่แล้วรองรับอยู่แล้ว) แล้วกรอง resolved ฝั่ง Java แทน
+     * Deliberately avoids whereEqualTo("resolved", false) in the query, which
+     * would need a new composite index on top of deviceId. Instead it queries by
+     * deviceId + orderBy timestamp exactly like findRecentByDevice — the index
+     * that already exists — and filters on resolved in Java.
      */
     public List<Alert> findActiveByDevice(String deviceId)
             throws ExecutionException, InterruptedException {
@@ -92,9 +92,9 @@ public class AlertRepository {
     }
 
     private Alert toAlert(DocumentSnapshot doc) {
-        // แถวเก่าก่อนเพิ่ม field นี้จะไม่มี "resolved" เลย — ถือว่า false
-        // (ยัง active อยู่) เพื่อความเข้ากันได้ย้อนหลัง ไม่ทำให้ query พังหรือ
-        // แถวเก่าหายไปจากผลลัพธ์
+        // Rows written before this field existed have no "resolved" key. Treat
+        // them as false (still active) for backward compatibility, so old rows
+        // neither break the query nor disappear from the results.
         Boolean resolved = doc.getBoolean("resolved");
         Long resolvedAtMs = doc.getLong("resolvedAt");
 

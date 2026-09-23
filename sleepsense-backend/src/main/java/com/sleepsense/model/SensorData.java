@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 import java.time.Instant;
 
 /**
- * ข้อมูลจาก sensor ทั้งหมดที่ ESP32 ส่งมาในแต่ละรอบ
+ * One round of sensor readings as sent by the ESP32.
  */
 @Data
 @Builder

@@ -14,7 +14,7 @@ class EnvironmentScore {
   });
 }
 
-/// ระดับสถานะของค่า sensor (ใช้เลือกสีตอนแสดงผล)
+/// Severity of a sensor value, used to pick its display colour.
 enum SensorLevel { normal, warning, critical }
 
 class SensorReading {
@@ -38,16 +38,18 @@ class PreSleepSuggestion {
   final String title;
   final String message;
 
-  /// key คงที่ของ "ปัญหา" นี้ (เช่น TEMP_HIGH, HUMIDITY_LOW, OK) ใช้อ้างอิงตอน
-  /// บันทึก/อ่านสถานะ "จัดการแล้ว" ใน local storage — ไม่ผูกกับตัวเลขที่เปลี่ยน
-  /// ทุกรอบ sensor อัปเดต เพื่อให้สถานะปุ่มคงอยู่ตราบใดที่ยังเป็นปัญหาเดิม
+  /// A stable key for this problem (TEMP_HIGH, HUMIDITY_LOW, OK). Used when
+  /// reading and writing the "handled" flag in local storage. It is deliberately
+  /// not tied to the numbers, which change on every sensor update, so the button
+  /// state survives for as long as it is the same problem.
   final String factorKey;
 
-  /// ข้อความปุ่ม action ที่แนะนำให้ทำ (เช่น "เปิดพัดลม/แอร์") — null เมื่อไม่มี
-  /// อะไรต้องทำ (สภาพแวดล้อมโอเคอยู่แล้ว)
+  /// Label for the suggested action ("Turn on the fan"). Null when there is
+  /// nothing to do because conditions are already fine.
   final String? actionLabel;
 
-  /// true = suggestion นี้คือปัญหาที่ควรเด่น (สีเตือน) ต่างจากข้อความปกติ/OK
+  /// True when this suggestion is a problem worth highlighting, as opposed to an
+  /// ordinary or all-clear message.
   final bool isWarning;
 
   const PreSleepSuggestion({

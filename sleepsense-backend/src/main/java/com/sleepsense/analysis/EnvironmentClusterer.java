@@ -6,18 +6,18 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 
 /**
- * Data Clustering — จัดกลุ่มสภาพแวดล้อมห้องนอนตาม feature vector
+ * Data clustering — groups a night's bedroom conditions by feature vector.
  *
- * ใช้ weighted-score แทน full K-Means เพื่อให้เหมาะกับขนาดข้อมูล prototype
- * ผลลัพธ์: "GOOD" | "MODERATE" | "POOR"
+ * Uses a weighted score rather than full k-means, which suits the amount of
+ * data a single night produces. Result: "GOOD" | "MODERATE" | "POOR".
  *
- * สามารถแทนที่ด้วย Weka หรือ library ML ภายหลังได้
+ * (PatternAnalyzer does the real k-means, across nights rather than within one.)
  */
 @Component
 public class EnvironmentClusterer {
 
     /**
-     * คืน cluster label สำหรับชุดข้อมูลทั้งคืน
+     * Cluster label for a whole night of readings.
      */
     public String cluster(List<SensorData> dataPoints) {
         if (dataPoints == null || dataPoints.isEmpty()) return "UNKNOWN";
@@ -27,15 +27,15 @@ public class EnvironmentClusterer {
                 .average()
                 .orElse(0.0);
 
-        // Score 0–100: ยิ่งสูงยิ่งดี
+        // Score 0-100: higher is better
         if (score >= 70) return "GOOD";
         if (score >= 40) return "MODERATE";
         return "POOR";
     }
 
     /**
-     * คืนค่า 0-100 สำหรับ sensor snapshot หนึ่งจุด
-     * แต่ละปัจจัยมี weight เท่ากัน (1/6)
+     * Score one sensor snapshot from 0 to 100.
+     * Every factor carries the same weight (1/6).
      */
     private double scorePoint(SensorData d) {
         double s = 0;

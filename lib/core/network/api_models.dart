@@ -1,7 +1,8 @@
-/// Models ที่ตรงกับ response ของ backend (parse จาก JSON)
-/// แยกจาก UI models (dashboard_models.dart) ที่เก็บค่าเป็น String สำหรับแสดงผล
+/// Models mirroring the backend responses, parsed from JSON.
+/// Kept separate from the UI models in dashboard_models.dart, which hold
+/// already-formatted strings for display.
 
-/// ตรงกับ SensorData ฝั่ง backend
+/// Mirrors SensorData on the backend.
 class SensorDataDto {
   final String id;
   final String deviceId;
@@ -43,7 +44,7 @@ class SensorDataDto {
   }
 }
 
-/// ตรงกับ Alert ฝั่ง backend
+/// Mirrors Alert on the backend.
 class AlertDto {
   final String id;
   final String deviceId;
@@ -53,8 +54,8 @@ class AlertDto {
   final double value;
   final double threshold;
   final DateTime? timestamp;
-  // true เมื่อ backend เห็นว่าปัญหานี้กลับสู่ภาวะปกติแล้ว — แถวเก่าที่ backend
-  // เวอร์ชันก่อนหน้ายังไม่มี field นี้จะถือว่า false (ยัง active) ไปก่อน
+  // True once the backend considers this problem resolved. Rows written by an
+  // older backend have no such field and are treated as false (still active).
   final bool resolved;
 
   const AlertDto({
@@ -86,7 +87,7 @@ class AlertDto {
   }
 }
 
-/// ตรงกับ MorningReport ฝั่ง backend
+/// Mirrors MorningReport on the backend.
 class MorningReportDto {
   final String id;
   final String deviceId;
@@ -106,7 +107,7 @@ class MorningReportDto {
   final int motionEventCount;
   final String motionPattern;        // LOW | MODERATE | HIGH
   final String environmentCluster;   // GOOD | MODERATE | POOR
-  final int dataCompleteness;         // % ความครบของข้อมูล
+  final int dataCompleteness;         // % of expected samples that arrived
   final List<String> anomalies;
   final List<String> suggestions;
 
@@ -161,8 +162,9 @@ class MorningReportDto {
   }
 }
 
-/// ตรงกับ ThresholdSettings ฝั่ง backend — ค่า threshold ที่ผู้ใช้ปรับเองได้
-/// ทุกฟิลด์เป็น nullable: null = ยังไม่ได้ปรับเอง ให้ backend ใช้ค่า default แทน
+/// Mirrors ThresholdSettings on the backend — the thresholds a user can tune.
+/// Every field is nullable: null means "not customised", and the backend uses
+/// its default instead.
 class ThresholdSettingsDto {
   final String deviceId;
   final double? co2Warning;

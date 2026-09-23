@@ -8,11 +8,11 @@ import lombok.NoArgsConstructor;
 import java.time.Instant;
 
 /**
- * ค่า threshold ที่ผู้ใช้ปรับเองสำหรับ device หนึ่งตัว (เก็บใน Firestore)
- * เช่น บางคนต้องนอนห้องเย็นกว่าปกติ หรือไวต่อฝุ่น/เสียงมากกว่าค่าเฉลี่ยทั่วไป
+ * Per-device thresholds the user has customised (stored in Firestore).
+ * Some people need a cooler room than average, or are more sensitive to dust
  *
- * ถ้า device ไหนไม่เคยบันทึกไว้ (ไม่มี document นี้) ระบบจะใช้ค่า default
- * จาก ThresholdConfig (application.properties) แทนโดยอัตโนมัติ
+ * or noise. When a device has no document here the system automatically falls
+ * back to the defaults in ThresholdConfig (application.properties).
  */
 @Data
 @Builder
@@ -45,6 +45,6 @@ public class ThresholdSettings {
 
     private Instant updatedAt;
 
-    /** true ถ้าผู้ใช้เคยบันทึกค่าที่ปรับเองไว้จริง (ไม่ใช่ default ที่ประกอบขึ้นมาโชว์เฉยๆ) */
+    /** True when the user really saved custom values, rather than these being defaults assembled for display. */
     private boolean customized;
 }

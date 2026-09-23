@@ -1,14 +1,11 @@
-/// Helper สำหรับปัดตัวเลขทศนิยมที่ฝังอยู่ในข้อความ (string) ให้เหลือไม่เกิน 2 ตำแหน่ง
+/// Rounds decimal numbers embedded in a sentence to at most two places.
 ///
-/// ข้อความบางส่วน (เช่น anomalies/suggestions ของ Morning Report) มาจาก
-/// backend เป็นประโยคสำเร็จรูปที่ฝังตัวเลขดิบไว้ตรงๆ เช่น
-/// "อุณหภูมิเฉลี่ยสูงตลอดคืน (31.633333333333336°C)" — ค่านี้มาจาก double
-/// ของ Java ที่ไม่ได้ format มาก่อนส่ง ฝั่ง client จึงไม่มี field ตัวเลขแยก
-/// ให้เรียก toStringAsFixed ตรงๆ ได้ ต้องหาตัวเลขทศนิยมในข้อความแล้วปัดเอง
-///
-/// ใช้ regex หาเลขทศนิยม (จุด + ตัวเลข) ทุกตัวในข้อความ แล้วแทนที่ด้วยค่าที่
-/// ปัดเหลือ [decimals] ตำแหน่งแล้ว (ตัวเลขที่เป็นจำนวนเต็มอยู่แล้ว เช่น
-/// จำนวนครั้ง จะไม่ถูกแตะต้อง)
+/// Some text — the anomalies and suggestions on a Morning Report, for instance —
+/// arrives from the backend as a finished sentence with a raw double spliced in,
+/// e.g. "Average temperature stayed high all night (31.633333333333336°C)".
+/// The client has no separate numeric field to call toStringAsFixed on, so the
+/// numbers have to be found in the string and rounded there. Whole numbers (a
+/// count of events, say) have no decimal point and are left alone.
 final RegExp _decimalNumberPattern = RegExp(r'-?\d+\.\d+');
 
 String roundDecimalsInText(String text, {int decimals = 2}) {

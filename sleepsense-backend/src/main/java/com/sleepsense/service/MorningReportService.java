@@ -27,10 +27,10 @@ public class MorningReportService {
     private final ThresholdSettingsService thresholdSettingsService;
 
     /**
-     * สร้างและบันทึก morning report สำหรับช่วงเวลาที่ระบุ
-     * ใช้ threshold ที่ "ใช้งานจริง" ของ device นี้ (custom ถ้าผู้ใช้เคยตั้งเอง
-     * ไม่งั้น fallback ไป default) เพื่อให้ anomaly/suggestion ใน report sync
-     * กับค่าที่ผู้ใช้ปรับไว้ในหน้า threshold settings เสมอ
+     * Build and store a morning report for the given sleep window.
+     * Uses this device's effective thresholds (custom if the user set any,
+     * otherwise the defaults) so the anomalies and suggestions in the report
+     * always agree with what the user configured in threshold settings.
      */
     public MorningReport generate(String deviceId, Instant sleepStart, Instant sleepEnd) {
         List<SensorData> data = sensorService.getRange(deviceId, sleepStart, sleepEnd);
@@ -50,7 +50,7 @@ public class MorningReportService {
     }
 
     /**
-     * ดึง morning report ล่าสุดของ device
+     * Fetch the most recent morning report for a device.
      */
     public Optional<MorningReport> getLatest(String deviceId) {
         try {
@@ -70,7 +70,7 @@ public class MorningReportService {
     }
 
     /**
-     * ดึง morning report ย้อนหลังหลายคืน (สำหรับหน้า Stats)
+     * Fetch several nights of morning reports (used by the Morning Report history).
      */
     public List<MorningReport> getHistory(String deviceId, int limit) {
         try {
@@ -93,16 +93,16 @@ public class MorningReportService {
     }
 
     /**
-     * ลบ morning report ตาม id (สำหรับปุ่มลบในแอป)
+     * Delete one morning report by id (the delete action in the app).
      */
     public boolean deleteById(String reportId) {
         try {
             Firestore db = FirestoreClient.getFirestore();
             db.collection(COLLECTION).document(reportId).delete().get();
-            log.info("ลบ morning report: {}", reportId);
+            log.info("Deleted morning report: {}", reportId);
             return true;
         } catch (Exception e) {
-            log.error("ลบ morning report {} ล้มเหลว", reportId, e);
+            log.error("Failed to delete morning report {}", reportId, e);
             return false;
         }
     }

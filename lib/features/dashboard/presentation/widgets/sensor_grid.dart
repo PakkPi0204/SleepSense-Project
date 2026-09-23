@@ -32,15 +32,15 @@ class SensorCard extends StatelessWidget {
 
   const SensorCard({required this.reading, super.key});
 
-  // สีของสถานะ/ค่า ตามระดับความรุนแรง
+  // Status colour by severity.
   Color get _statusColor {
     switch (reading.level) {
       case SensorLevel.critical:
-        return const Color(0xFFE85D5D); // แดง
+        return const Color(0xFFE85D5D); // red
       case SensorLevel.warning:
-        return AppColors.accent;         // ส้ม
+        return AppColors.accent;         // orange
       case SensorLevel.normal:
-        return AppColors.secondary;      // ฟ้าเขียว (ปกติ)
+        return AppColors.secondary;      // teal (normal)
     }
   }
 

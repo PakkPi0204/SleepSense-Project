@@ -28,7 +28,7 @@ class _SleepMonitoringButtonState extends State<SleepMonitoringButton> {
     _restoreState();
   }
 
-  /// กู้สถานะ monitoring จาก storage (กรณีปิดแอปแล้วเปิดใหม่)
+  /// Restore the monitoring state from storage after an app restart.
   Future<void> _restoreState() async {
     final prefs = await SharedPreferences.getInstance();
     final active = prefs.getBool(_kActiveKey) ?? false;
@@ -150,7 +150,7 @@ class _SleepMonitoringButtonState extends State<SleepMonitoringButton> {
             });
             _clearState();
 
-            // สร้าง morning report จริงจากช่วงเวลานอน
+            // Generate a real morning report for the sleep window.
             final api = ApiService();
             final result = await api.generateReport(
               sleepStart: start.millisecondsSinceEpoch,
@@ -158,9 +158,9 @@ class _SleepMonitoringButtonState extends State<SleepMonitoringButton> {
             );
             api.dispose();
 
-            // แจ้งหน้า Home ให้โหลดข้อมูลใหม่ทันที (การ์ด Morning Report จะได้
-            // ไม่ต้องรอ auto-refresh รอบถัดไปถึงจะเห็นรายงานที่เพิ่งสร้าง —
-            // เพราะ IndexedStack ทำให้หน้า Home ไม่ reload เองตอนสลับแท็บ)
+            // Tell Home to reload immediately, so the Morning Report card does
+            // not have to wait for the next auto-refresh to show the report we
+            // just created — IndexedStack keeps Home alive across tab switches.
             if (result == ReportResult.success) {
               DashboardRefreshBus.instance.notifyDataChanged();
             }
@@ -435,10 +435,10 @@ class _MonitoringStoppedSheet extends StatelessWidget {
                     Center(
                       child: Text(
                         result == ReportResult.success
-                            ? 'สร้างรายงานเช้าแล้ว'
+                            ? 'Morning report ready'
                             : result == ReportResult.noData
-                                ? 'ไม่มีข้อมูลในช่วงที่ติดตาม'
-                                : 'หยุดการติดตามแล้ว',
+                                ? 'No data for this period'
+                                : 'Monitoring stopped',
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                           color: AppColors.white,
@@ -451,10 +451,10 @@ class _MonitoringStoppedSheet extends StatelessWidget {
                     Center(
                       child: Text(
                         result == ReportResult.success
-                            ? 'ดูรายงานสภาพแวดล้อมการนอนคืนนี้ได้ที่หน้า Stats'
+                            ? 'Open the Morning Report card on Home to read tonight\'s summary.'
                             : result == ReportResult.noData
-                                ? 'ไม่พบข้อมูลเซนเซอร์ในช่วงเวลานี้ — ตรวจสอบว่าอุปกรณ์เปิดและส่งข้อมูลอยู่'
-                                : 'ไม่สามารถสร้างรายงานได้ (เชื่อมต่อ backend ไม่สำเร็จ)',
+                                ? 'No sensor data was recorded in this window — check that the device is on and sending.'
+                                : 'The report could not be generated (could not reach the backend).',
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                           color: AppColors.neutral,
@@ -467,7 +467,7 @@ class _MonitoringStoppedSheet extends StatelessWidget {
                     const SizedBox(height: 22),
                     _ReportMetricRow(
                       icon: Icons.schedule_rounded,
-                      label: 'ระยะเวลาติดตาม',
+                      label: 'Time monitored',
                       value: _formatDuration(duration),
                     ),
                     const SizedBox(height: 10),
@@ -475,12 +475,12 @@ class _MonitoringStoppedSheet extends StatelessWidget {
                       icon: result == ReportResult.success
                           ? Icons.check_circle_outline_rounded
                           : Icons.error_outline_rounded,
-                      label: 'สถานะรายงาน',
+                      label: 'Report status',
                       value: result == ReportResult.success
-                          ? 'สร้างสำเร็จ'
+                          ? 'Created'
                           : result == ReportResult.noData
-                              ? 'ไม่มีข้อมูล'
-                              : 'ไม่สำเร็จ',
+                              ? 'No data'
+                              : 'Failed',
                       accent: result != ReportResult.success,
                     ),
                     const SizedBox(height: 24),

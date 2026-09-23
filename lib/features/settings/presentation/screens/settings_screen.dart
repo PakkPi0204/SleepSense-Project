@@ -6,7 +6,7 @@ import '../../../../core/network/api_service.dart';
 import '../../../../core/debug/debug_flags.dart';
 import 'threshold_settings_screen.dart';
 
-/// หน้า Settings — แสดงข้อมูล device + สถานะการเชื่อมต่อ + ข้อมูลระบบ
+/// Settings — device details, connection status and system information.
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
@@ -75,18 +75,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   const SizedBox(height: 6),
                   const Text(
-                    'ข้อมูลอุปกรณ์และการเชื่อมต่อ',
+                    'Device and connection information',
                     style: TextStyle(color: AppColors.neutral, fontSize: 14),
                   ),
                   const SizedBox(height: 28),
 
-                  // ── สถานะการเชื่อมต่อ ──
+                  // ── Connection status ──
                   _sectionTitle('Connection'),
                   const SizedBox(height: 12),
                   _connectionCard(),
                   const SizedBox(height: 28),
 
-                  // ── ข้อมูลอุปกรณ์ ──
+                  // ── Device information ──
                   _sectionTitle('Device'),
                   const SizedBox(height: 12),
                   _infoTile(Icons.memory, 'Device ID', ApiConfig.deviceId),
@@ -94,13 +94,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   _infoTile(Icons.sensors, 'Sensors', '6 environmental sensors'),
                   const SizedBox(height: 28),
 
-                  // ── ปรับค่าการแจ้งเตือนเอง ──
+                  // ── Custom alert thresholds ──
                   _sectionTitle('Alerts'),
                   const SizedBox(height: 12),
                   _navTile(
                     icon: Icons.tune,
-                    label: 'ปรับค่าการแจ้งเตือน (Threshold)',
-                    subtitle: 'ปรับอุณหภูมิ ความชื้น ฝุ่น เสียง ฯลฯ ให้เข้ากับตัวเอง',
+                    label: 'Alert thresholds',
+                    subtitle: 'Tune temperature, humidity, dust, noise and more to suit you',
                     onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
@@ -110,7 +110,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   const SizedBox(height: 28),
 
-                  // ── เกี่ยวกับ ──
+                  // ── About ──
                   _sectionTitle('About'),
                   const SizedBox(height: 12),
                   _infoTile(Icons.info_outline, 'App', 'SleepSense'),
@@ -119,7 +119,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       'Sleep environment monitoring'),
                   const SizedBox(height: 28),
 
-                  // ── โหมดทดสอบ (dev only) ──
+                  // ── Developer options ──
                   _sectionTitle('Developer'),
                   const SizedBox(height: 12),
                   _debugCriticalToggle(),
@@ -149,8 +149,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ? AppColors.neutral
         : (_connected ? AppColors.secondary : const Color(0xFFE85D5D));
     final statusText = _checking
-        ? 'กำลังตรวจสอบ...'
-        : (_connected ? 'เชื่อมต่อแล้ว' : 'ไม่ได้เชื่อมต่อ');
+        ? 'Checking...'
+        : (_connected ? 'Connected' : 'Not connected');
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -196,7 +196,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'อัปเดตล่าสุด: ${_formatTime(_lastUpdate!)}',
+                    'Last updated: ${_formatTime(_lastUpdate!)}',
                     style: const TextStyle(
                         color: AppColors.neutral, fontSize: 13),
                   ),
@@ -209,7 +209,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  /// tile ที่กดแล้วเด้งไปหน้าอื่น (ใช้กับ Threshold Settings)
+  /// A tile that pushes another screen (used for Threshold Settings).
   Widget _navTile({
     required IconData icon,
     required String label,
@@ -310,9 +310,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  /// สวิตช์โหมดทดสอบ: บังคับให้ critical alert popup เด้งทุกครั้งที่เจอ
-  /// แม้จะเป็นตัวที่ค้างอยู่แล้วตั้งแต่เปิดแอป — มีประโยชน์ตอนทดสอบ UI ของ popup
-  /// (ไม่ persist ข้ามการเปิดแอปใหม่)
+  /// Developer switch: always show the critical alert popup when one is found,
+  /// even for an alert that was already pending at launch. Useful when testing
+  /// the popup itself.
   Widget _debugCriticalToggle() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -325,7 +325,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         contentPadding: EdgeInsets.zero,
         activeThumbColor: AppColors.accent,
         title: const Text(
-          'บังคับเด้ง Critical Popup',
+          'Always show critical popup',
           style: TextStyle(
             color: AppColors.white,
             fontSize: 14,
@@ -333,16 +333,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         subtitle: const Text(
-          'สำหรับทดสอบ — เด้ง popup ทันทีที่เปิดแอปถ้ามี critical alert ค้างอยู่\n'
-          'แม้เป็นตัวเก่าที่เคยเห็นแล้ว (ปกติจะรอ critical ใหม่เท่านั้น)',
+          'For testing — shows the popup at launch if a critical alert is pending,\n'
+          'even one already seen. Normally only new criticals are shown.',
           style: TextStyle(color: AppColors.neutral, fontSize: 12, height: 1.4),
         ),
         value: _debugAlwaysShowCritical,
         onChanged: (value) {
           setState(() => _debugAlwaysShowCritical = value);
-          // เซ็ตผ่าน setter นี้แทนการเซ็ต field ตรงๆ เพื่อให้ค่าถูกบันทึกลง
-          // SharedPreferences ด้วย ไม่งั้นสวิตช์จะรีเซ็ตกลับ false ทุกครั้งที่
-          // force-kill แอปแล้วเปิดใหม่ (ปัญหาที่ผู้ใช้เจอ)
+          // Go through the setter rather than the field so the value is written
+          // to SharedPreferences too — otherwise the switch resets to false
+          // every time the app is force-killed and reopened.
           DebugFlags.setAlwaysShowCriticalOnLoad(value);
         },
       ),
@@ -354,12 +354,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final d = DateTime.parse(iso).toLocal();
       final now = DateTime.now();
       final diff = now.difference(d);
-      if (diff.inMinutes < 1) return 'เมื่อสักครู่';
-      if (diff.inMinutes < 60) return '${diff.inMinutes} นาทีที่แล้ว';
-      if (diff.inHours < 24) return '${diff.inHours} ชั่วโมงที่แล้ว';
+      if (diff.inMinutes < 1) return 'Just now';
+      if (diff.inMinutes < 60) return '${diff.inMinutes} min ago';
+      if (diff.inHours < 24) return '${diff.inHours} hr ago';
       return '${d.day}/${d.month}/${d.year}';
     } catch (_) {
-      return 'ไม่ทราบ';
+      return 'Unknown';
     }
   }
 }

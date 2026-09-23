@@ -1,5 +1,5 @@
-/// Helper สำหรับแปลงเวลาเป็นข้อความ "ผ่านมาแล้วกี่นาที/ชั่วโมง" (relative time)
-/// ใช้ร่วมกันในหน้า Alerts / Stats เพื่อให้ผู้ใช้เห็นว่าเหตุการณ์เพิ่งเกิดหรือไม่
+/// Formats a timestamp as relative time ("5 minutes ago"), shared by the Alerts
+/// and Morning Report screens so the user can see how recent an event is.
 String formatRelativeTime(DateTime? timestamp) {
   if (timestamp == null) return '';
 
@@ -8,12 +8,12 @@ String formatRelativeTime(DateTime? timestamp) {
   final diff = now.difference(ts);
 
   if (diff.isNegative || diff.inSeconds < 60) {
-    return 'เมื่อสักครู่';
+    return 'Just now';
   } else if (diff.inMinutes < 60) {
-    return '${diff.inMinutes} นาทีที่แล้ว';
+    return '${diff.inMinutes} min ago';
   } else if (diff.inHours < 24) {
-    return '${diff.inHours} ชั่วโมงที่แล้ว';
+    return '${diff.inHours} hr ago';
   } else {
-    return '${diff.inDays} วันที่แล้ว';
+    return '${diff.inDays} days ago';
   }
 }

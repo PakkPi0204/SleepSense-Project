@@ -3,18 +3,20 @@ import 'package:http/http.dart' as http;
 
 import 'api_config.dart';
 import 'api_models.dart';
+import '../../features/patterns/models/pattern_models.dart';
 
-/// ผลลัพธ์การสร้าง morning report
+/// Outcome of asking the backend to build a morning report.
 enum ReportResult {
-  success,  // สร้างสำเร็จ มีข้อมูล
-  noData,   // สร้างได้แต่ไม่มีข้อมูล sensor ในช่วงนั้น
-  failed,   // เชื่อม backend ไม่ได้ / error
+  success, // built, and there was data behind it
+  noData, // built, but no sensor data existed for that window
+  failed, // could not reach the backend, or it errored
 }
 
-/// ชั้นเรียก backend API ทั้งหมด
+/// Every backend call lives here.
 ///
-/// ทุก endpoint ของ backend ห่อ response ด้วย { success, message, data }
-/// service นี้จะ unwrap ให้ แล้วคืนเฉพาะ data (หรือ throw ถ้า success=false)
+/// All endpoints wrap their payload in `{ success, message, data }`. This
+/// service unwraps that and returns only `data`, or throws when `success` is
+/// false.
 class ApiService {
   final http.Client _client;
   final Duration timeout;
@@ -22,7 +24,7 @@ class ApiService {
   ApiService({http.Client? client, this.timeout = const Duration(seconds: 8)})
       : _client = client ?? http.Client();
 
-  /// ค่า sensor ล่าสุด
+  /// The latest sensor reading.
   Future<SensorDataDto?> fetchLatestSensor({String? deviceId}) async {
     final id = deviceId ?? ApiConfig.deviceId;
     final data = await _getData(ApiConfig.sensorLatest(id));
@@ -30,7 +32,7 @@ class ApiService {
     return SensorDataDto.fromJson(data as Map<String, dynamic>);
   }
 
-  /// คำแนะนำก่อนนอน (list ของข้อความ)
+  /// Pre-sleep advice, as a list of sentences.
   Future<List<String>> fetchPreSleepSuggestions({String? deviceId}) async {
     final id = deviceId ?? ApiConfig.deviceId;
     final data = await _getData(ApiConfig.preSleep(id));
@@ -38,8 +40,9 @@ class ApiService {
     return const [];
   }
 
-  /// alert ล่าสุด (ประวัติทั้งหมด รวมที่ resolved แล้ว — ใช้กับหน้า Alerts log)
-  Future<List<AlertDto>> fetchRecentAlerts({String? deviceId, int limit = 20}) async {
+  /// Recent alerts — the full history including resolved ones, for the Alerts log.
+  Future<List<AlertDto>> fetchRecentAlerts(
+      {String? deviceId, int limit = 20}) async {
     final id = deviceId ?? ApiConfig.deviceId;
     final data = await _getData(ApiConfig.alertsRecent(id, limit: limit));
     if (data is List) {
@@ -50,9 +53,10 @@ class ApiService {
     return const [];
   }
 
-  /// alert ที่ยัง active อยู่จริง (ยังไม่ resolved) — ใช้กับ badge หน้า Home
-  /// และตัดสินว่าจะบังคับเด้ง critical popup ไหม แทน fetchRecentAlerts ซึ่งเป็น
-  /// ประวัติล้วนๆ รวมของเก่าที่ปัญหาหายไปแล้วด้วย
+  /// Alerts that are genuinely still active (not yet resolved). Used for the
+  /// Home badge and for deciding whether to force the critical popup, instead of
+  /// [fetchRecentAlerts], which is pure history and includes problems that have
+  /// since cleared.
   Future<List<AlertDto>> fetchActiveAlerts({String? deviceId}) async {
     final id = deviceId ?? ApiConfig.deviceId;
     final data = await _getData(ApiConfig.alertsActive(id));
@@ -64,7 +68,7 @@ class ApiService {
     return const [];
   }
 
-  /// morning report ล่าสุด
+  /// The most recent morning report.
   Future<MorningReportDto?> fetchLatestReport({String? deviceId}) async {
     final id = deviceId ?? ApiConfig.deviceId;
     final data = await _getData(ApiConfig.reportLatest(id));
@@ -72,7 +76,7 @@ class ApiService {
     return MorningReportDto.fromJson(data as Map<String, dynamic>);
   }
 
-  /// morning report ย้อนหลังหลายคืน (หน้า Stats)
+  /// Several nights of morning reports, for the Morning Report history screen.
   Future<List<MorningReportDto>> fetchReportHistory(
       {String? deviceId, int limit = 30}) async {
     final id = deviceId ?? ApiConfig.deviceId;
@@ -85,7 +89,22 @@ class ApiService {
     return const [];
   }
 
-  /// ผลลัพธ์การสร้าง report
+  /// The multi-night pattern analysis behind the Sleep Patterns screen.
+  ///
+  /// Test Plan reference: STC-04. The response carries the clustered nights and
+  /// the detected patterns as well as the advice, so the screen can show the
+  /// evidence for each recommendation.
+  Future<PatternAnalysis> fetchSmartSuggestions({
+    String? deviceId,
+    int nights = 14,
+  }) async {
+    final id = deviceId ?? ApiConfig.deviceId;
+    final data = await _getData(ApiConfig.smartSuggestions(id, nights: nights));
+    if (data is Map<String, dynamic>) return PatternAnalysis.fromJson(data);
+    return PatternAnalysis.empty;
+  }
+
+  /// Ask the backend to build a report for a sleep window.
   Future<ReportResult> generateReport({
     String? deviceId,
     required int sleepStart,
@@ -97,9 +116,10 @@ class ApiService {
           .post(Uri.parse(ApiConfig.reportGenerate(id, sleepStart, sleepEnd)))
           .timeout(timeout);
       if (res.statusCode != 200) return ReportResult.failed;
-      final body = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
+      final body =
+          jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
       if (body['success'] != true) return ReportResult.failed;
-      // เช็คว่ามีข้อมูล sensor ในช่วงนั้นไหม (cluster UNKNOWN = ไม่มีข้อมูล)
+      // Was there any sensor data in that window? A cluster of UNKNOWN means no.
       final data = body['data'];
       if (data is Map && data['environmentCluster'] == 'UNKNOWN') {
         return ReportResult.noData;
@@ -110,29 +130,31 @@ class ApiService {
     }
   }
 
-  /// ลบ morning report ทีละรายการ
+  /// Delete a single morning report.
   Future<bool> deleteReport(String reportId) async {
     try {
       final res = await _client
           .delete(Uri.parse(ApiConfig.reportDelete(reportId)))
           .timeout(timeout);
       if (res.statusCode != 200) return false;
-      final body = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
+      final body =
+          jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
       return body['success'] == true;
     } catch (e) {
       return false;
     }
   }
 
-  /// ดึงค่า threshold ปัจจุบันของ device (custom ถ้ามี ไม่งั้นเป็น default)
+  /// This device's current thresholds — custom if any, otherwise the defaults.
   Future<ThresholdSettingsDto> fetchThresholds({String? deviceId}) async {
     final id = deviceId ?? ApiConfig.deviceId;
     final data = await _getData(ApiConfig.thresholds(id));
     return ThresholdSettingsDto.fromJson(data as Map<String, dynamic>);
   }
 
-  /// บันทึกค่า threshold ที่ผู้ใช้ปรับเอง — throw ApiException ถ้าค่าไม่สมเหตุสมผล
-  /// (เช่น warning มากกว่า critical) โดย backend จะส่งข้อความอธิบายกลับมา
+  /// Save the user's custom thresholds. Throws [ApiException] when the values
+  /// do not make sense (warning above critical, for instance) — the backend
+  /// sends an explanatory message back.
   Future<ThresholdSettingsDto> updateThresholds(
       ThresholdSettingsDto settings) async {
     late final http.Response res;
@@ -145,17 +167,17 @@ class ApiService {
           )
           .timeout(timeout);
     } catch (e) {
-      throw ApiException('เชื่อมต่อ backend ไม่ได้: $e');
+      throw ApiException('Could not reach the backend: $e');
     }
 
     final body = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
     if (body['success'] != true) {
-      throw ApiException((body['message'] ?? 'บันทึกไม่สำเร็จ').toString());
+      throw ApiException((body['message'] ?? 'Could not save').toString());
     }
     return ThresholdSettingsDto.fromJson(body['data'] as Map<String, dynamic>);
   }
 
-  /// รีเซ็ต threshold กลับไปใช้ค่า default ของระบบ
+  /// Reset this device's thresholds back to the system defaults.
   Future<ThresholdSettingsDto> resetThresholds({String? deviceId}) async {
     final id = deviceId ?? ApiConfig.deviceId;
     late final http.Response res;
@@ -164,23 +186,23 @@ class ApiService {
           .delete(Uri.parse(ApiConfig.thresholds(id)))
           .timeout(timeout);
     } catch (e) {
-      throw ApiException('เชื่อมต่อ backend ไม่ได้: $e');
+      throw ApiException('Could not reach the backend: $e');
     }
     final body = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
     if (body['success'] != true) {
-      throw ApiException((body['message'] ?? 'รีเซ็ตไม่สำเร็จ').toString());
+      throw ApiException((body['message'] ?? 'Could not reset').toString());
     }
     return ThresholdSettingsDto.fromJson(body['data'] as Map<String, dynamic>);
   }
 
   // ──────────────────────────────────────────────
-  /// ยิง GET แล้ว unwrap { success, message, data }
+  /// GET the URL and unwrap `{ success, message, data }`.
   Future<dynamic> _getData(String url) async {
     late final http.Response res;
     try {
       res = await _client.get(Uri.parse(url)).timeout(timeout);
     } catch (e) {
-      throw ApiException('เชื่อมต่อ backend ไม่ได้: $e');
+      throw ApiException('Could not reach the backend: $e');
     }
 
     if (res.statusCode != 200) {

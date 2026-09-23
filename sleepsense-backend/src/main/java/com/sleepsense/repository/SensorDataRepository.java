@@ -20,7 +20,7 @@ public class SensorDataRepository {
     }
 
     /**
-     * บันทึกข้อมูล sensor ลง Firestore
+     * Save one sensor reading to Firestore.
      */
     public String save(SensorData data) throws ExecutionException, InterruptedException {
         Map<String, Object> doc = toMap(data);
@@ -30,7 +30,7 @@ public class SensorDataRepository {
     }
 
     /**
-     * ดึงข้อมูล sensor ล่าสุด 1 รายการของ device
+     * Fetch the single most recent reading for a device.
      */
     public Optional<SensorData> findLatest(String deviceId) throws ExecutionException, InterruptedException {
         QuerySnapshot snapshot = db().collection(COLLECTION)
@@ -44,7 +44,7 @@ public class SensorDataRepository {
     }
 
     /**
-     * ดึงข้อมูล sensor ในช่วงเวลาที่กำหนด (สำหรับ morning report)
+     * Fetch every reading in a time range (used by the morning report).
      */
     public List<SensorData> findByDeviceAndTimeRange(String deviceId, Instant from, Instant to)
             throws ExecutionException, InterruptedException {

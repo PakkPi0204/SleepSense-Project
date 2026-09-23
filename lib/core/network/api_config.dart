@@ -1,29 +1,29 @@
 import 'package:flutter/foundation.dart';
 
-/// การตั้งค่าการเชื่อมต่อ backend
+/// Backend connection settings.
 ///
-/// เปลี่ยน baseUrl ตามที่รันทดสอบ:
+/// Set baseUrl to match where you are running:
 /// - Android emulator : http://10.0.2.2:8080
-/// - มือถือจริง       : http://<IP เครื่อง backend>:8080  (WiFi เดียวกัน)
-/// - เว็บ / เดสก์ท็อป  : http://localhost:8080
+/// - Physical phone   : http://<backend machine IP>:8080  (same Wi-Fi)
+/// - Web / desktop    : http://localhost:8080
 class ApiConfig {
   ApiConfig._();
 
-  /// device id ที่ใช้คู่กับ ESP32 (ต้องตรงกับที่ ESP32 ส่งมา)
+  /// Device id paired with the ESP32 — must match what the ESP32 sends.
   static const String deviceId = 'test-device-01';
 
-  /// ⚠️ แก้ค่านี้เมื่อทดสอบบนมือถือจริง ให้เป็น IP ของเครื่องที่รัน backend
-  /// เช่น 'http://192.168.1.42:8080'
+  /// Set this when testing on a physical phone: the IP of the machine running
+  /// the backend, e.g. 'http://192.168.1.42:8080'.
   static const String _manualOverride = '';
 
-  /// เลือก baseUrl อัตโนมัติตาม platform
+  /// Picks a baseUrl automatically based on the platform.
   static String get baseUrl {
     if (_manualOverride.isNotEmpty) return _manualOverride;
 
     if (kIsWeb) {
       return 'http://localhost:8080';
     }
-    // Android emulator ใช้ 10.0.2.2 แทน localhost ของเครื่อง host
+    // The Android emulator reaches the host machine at 10.0.2.2, not localhost.
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
         return 'http://10.0.2.2:8080';
@@ -48,4 +48,6 @@ class ApiConfig {
   static String reportGenerate(String id, int sleepStart, int sleepEnd) =>
       '$baseUrl/api/report/generate?deviceId=$id&sleepStart=$sleepStart&sleepEnd=$sleepEnd';
   static String thresholds(String id) => '$baseUrl/api/thresholds?deviceId=$id';
+  static String smartSuggestions(String id, {int nights = 14}) =>
+      '$baseUrl/api/suggestions/smart?deviceId=$id&nights=$nights';
 }

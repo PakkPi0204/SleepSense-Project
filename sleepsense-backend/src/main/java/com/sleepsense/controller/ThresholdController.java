@@ -17,8 +17,8 @@ public class ThresholdController {
 
     /**
      * GET /api/thresholds?deviceId=xxx
-     * คืนค่า threshold ที่ใช้งานจริงของ device นี้ (custom ถ้ามี ไม่งั้นเป็น default)
-     * พร้อม flag "customized" บอกว่าเป็นค่าที่ผู้ใช้ปรับเองหรือเป็นค่าตั้งต้นของระบบ
+     * Returns this device's effective thresholds (custom if any, otherwise the
+     * defaults), with a "customized" flag saying which of the two it is.
      */
     @GetMapping
     public ResponseEntity<ApiResponse<ThresholdSettings>> get(@RequestParam String deviceId) {
@@ -28,8 +28,8 @@ public class ThresholdController {
 
     /**
      * PUT /api/thresholds?deviceId=xxx
-     * บันทึกค่า threshold ที่ผู้ใช้ปรับเอง — ส่งได้ทั้งชุด หรือเฉพาะฟิลด์ที่อยากเปลี่ยน
-     * (ฟิลด์ที่เป็น null จะถูกเติมด้วยค่า default ของระบบตอนนำไปใช้งานจริง)
+     * Save the user's custom thresholds. Send the whole set or only the fields
+     * you want to change; null fields fall back to the system defaults in use.
      */
     @PutMapping
     public ResponseEntity<ApiResponse<ThresholdSettings>> update(
@@ -37,7 +37,7 @@ public class ThresholdController {
             @Valid @RequestBody ThresholdSettings input) {
         try {
             ThresholdSettings saved = thresholdSettingsService.save(deviceId, input);
-            return ResponseEntity.ok(ApiResponse.ok("บันทึกค่า threshold แล้ว", saved));
+            return ResponseEntity.ok(ApiResponse.ok("Thresholds saved", saved));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
         }
@@ -45,11 +45,11 @@ public class ThresholdController {
 
     /**
      * DELETE /api/thresholds?deviceId=xxx
-     * รีเซ็ต threshold ของ device นี้กลับไปใช้ค่า default ของระบบ
+     * Reset this device's thresholds back to the system defaults.
      */
     @DeleteMapping
     public ResponseEntity<ApiResponse<ThresholdSettings>> reset(@RequestParam String deviceId) {
         ThresholdSettings reset = thresholdSettingsService.resetToDefault(deviceId);
-        return ResponseEntity.ok(ApiResponse.ok("รีเซ็ตกลับเป็นค่า default แล้ว", reset));
+        return ResponseEntity.ok(ApiResponse.ok("Reset to system defaults", reset));
     }
 }

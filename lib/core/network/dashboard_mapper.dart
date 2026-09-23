@@ -1,33 +1,36 @@
 import 'package:flutter/material.dart';
 
 import '../network/api_models.dart';
+import '../../shared/utils/english_text.dart';
 import '../scoring/environment_scoring.dart';
 import '../../features/dashboard/models/dashboard_models.dart';
 
-/// แปลงข้อมูลจาก backend (DTO) → UI models ที่หน้าจอใช้อยู่แล้ว
-/// รวมตรรกะการ format ค่า + จัดสถานะ (Optimal/Warning ฯลฯ) ไว้ที่เดียว
+/// Maps backend DTOs onto the UI models the screens already use, keeping value
+/// formatting and status wording (Optimal / Warning / ...) in one place.
 ///
-/// หมายเหตุ: ทุกฟังก์ชันที่ต้องตัดสิน Warning/Critical รับ [ThresholdSettingsDto?]
-/// เข้ามาด้วยเสมอ ถ้าไม่ส่งมา (หรือ field เป็น null) จะ fallback เป็นค่า default
-/// เดิมของระบบ — ค่า default พวกนี้ต้องตรงกับ ThresholdConfig.java ฝั่ง backend
+/// Note: every function that has to decide Warning vs Critical takes a
+/// [ThresholdSettingsDto?]. When it is absent — or a field inside it is null —
+/// the system defaults apply, and those defaults must match ThresholdConfig.java
+/// on the backend.
 class DashboardMapper {
-  /// เช็คว่าข้อมูล sensor เก่าเกินไปไหม (ESP32 อาจหยุดส่ง/ออฟไลน์)
-  /// ESP32 ส่งทุก 30 วิ — ถ้าเกิน 2 นาทีถือว่าน่าจะออฟไลน์
+  /// Is this reading too old to trust? The ESP32 posts every 30 seconds, so
+  /// nothing for two minutes suggests the device is offline.
   static bool isStale(String timestamp) {
     try {
       final last = DateTime.parse(timestamp).toLocal();
       final diff = DateTime.now().difference(last);
-      return diff.inSeconds > 120; // เกิน 2 นาที
+      return diff.inSeconds > 120;
     } catch (_) {
-      return false; // อ่าน timestamp ไม่ได้ ไม่ตัดสินว่า stale
+      return false; // an unparseable timestamp is not evidence of staleness
     }
   }
 
   DashboardMapper._();
 
-  /// SensorDataDto → list ของ SensorReading (6 การ์ด)
-  /// [thresholds] คือค่าที่ผู้ใช้ปรับเอง (หรือ default จาก backend) — ใช้ตัดสิน
-  /// สถานะ Optimal/Warning/Critical ของแต่ละค่า
+  /// SensorDataDto to the list of sensor cards.
+  ///
+  /// [thresholds] are the user's own values (or the backend defaults) and decide
+  /// whether each reading shows as Optimal, Warning or Critical.
   static List<SensorReading> toSensorReadings(
     SensorDataDto d, {
     ThresholdSettingsDto? thresholds,
@@ -127,9 +130,8 @@ class DashboardMapper {
     ];
   }
 
-  // ── ระดับความรุนแรงตาม threshold (สำหรับเลือกสี) ──
-  // รับช่วง min/max (+ critical min/max ถ้ามี) มาจาก ThresholdSettingsDto แทน
-  // การ hardcode ค่าคงที่ไว้ในฟังก์ชัน
+  // ── Severity by threshold, used to choose colours ──
+  // The bounds come from ThresholdSettingsDto rather than being hardcoded here.
   static SensorLevel _rangeLevel(double v, double min, double max,
       {double? criticalMin, double? criticalMax}) {
     if (criticalMin != null && v < criticalMin) return SensorLevel.critical;
@@ -138,7 +140,7 @@ class DashboardMapper {
     return SensorLevel.normal;
   }
 
-  /// ใช้กับค่าที่ยิ่งสูงยิ่งแย่ทางเดียว (CO2 / PM2.5 / Light / Noise)
+  /// For values that only get worse in one direction (CO2 / PM2.5 / Light / Noise).
   static SensorLevel _thresholdLevel(
       double v, double warning, double critical) {
     if (v >= critical) return SensorLevel.critical;
@@ -146,11 +148,11 @@ class DashboardMapper {
     return SensorLevel.normal;
   }
 
-  /// คำนวณ environment score จากค่า sensor (0-100) โดยอิงตาม threshold ของผู้ใช้
+  /// Environment score (0-100) for a reading, against the user's thresholds.
   ///
-  /// ใช้สูตรเดียวกับ [SleepMapper.toReadiness] เป๊ะๆ ผ่าน [EnvironmentScoring]
-  /// ที่ใช้ร่วมกัน เพื่อไม่ให้หน้า Home กับหน้า Sleep คิดคะแนนไม่ตรงกันสำหรับ
-  /// sensor ชุดเดียวกัน (เดิมหน้านี้ใช้สูตร "หัก" คนละแบบกับหน้า Sleep)
+  /// Uses exactly the same formula as SleepMapper.toReadiness through the shared
+  /// [EnvironmentScoring], so Home and Sleep cannot disagree about the same
+  /// sensor data.
   static EnvironmentScore toEnvironmentScore(
     SensorDataDto d, {
     ThresholdSettingsDto? thresholds,
@@ -165,25 +167,27 @@ class DashboardMapper {
     );
   }
 
-  /// list ข้อความ (จาก backend) → PreSleepSuggestion แบบ "Smart Suggestion"
-  /// โชว์อันแรกที่ backend ส่งมา แต่แปลงเป็นคำแนะนำเชิง action ที่กดจัดการได้เลย
-  /// พร้อมแนบ [factorKey] คงที่ไว้ผูกกับสถานะปุ่ม "เปิดแล้ว" ใน local storage
+  /// Backend advice strings to a single actionable pre-sleep suggestion.
+  ///
+  /// Shows the first thing the backend flagged, rewritten as something the user
+  /// can act on, with a stable [PreSleepSuggestion.factorKey] tying the button
+  /// state to the problem rather than to the numbers.
   static PreSleepSuggestion toPreSleepSuggestion(List<String> suggestions) {
     if (suggestions.isEmpty) {
       return const PreSleepSuggestion(
         icon: Icons.check_circle_outline,
-        title: 'Smart Suggestion',
+        title: 'Pre-Sleep Check',
         message:
-            'สภาพแวดล้อมห้องนอนของคุณพร้อมสำหรับการนอนหลับแล้ว ✓ ไม่มีจุดที่ต้องปรับตอนนี้',
+            'Your bedroom is ready for sleep. Nothing needs adjusting right now.',
         factorKey: 'OK',
       );
     }
 
-    final raw = suggestions.first;
+    final raw = englishSuggestion(suggestions.first);
     final rule = _matchSuggestionRule(raw);
     return PreSleepSuggestion(
       icon: rule.icon,
-      title: 'Smart Suggestion',
+      title: 'Pre-Sleep Check',
       message: rule.buildMessage(raw),
       factorKey: rule.factorKey,
       actionLabel: rule.actionLabel,
@@ -191,85 +195,96 @@ class DashboardMapper {
     );
   }
 
-  /// จับคำสำคัญในข้อความที่ backend ส่งมา (ภาษาไทย) เพื่อแมปเป็น factor ที่คงที่
-  /// + คำแนะนำเชิง action — ใช้การจับคำแทนการเทียบข้อความแบบเป๊ะ เพราะตัวเลข
-  /// (องศา/ppm/%) ในข้อความจะเปลี่ยนไปทุกครั้งที่ sensor อัปเดตค่าใหม่
+  /// Match keywords in the backend's message to a stable factor plus an action.
+  ///
+  /// Keyword matching rather than exact comparison, because the numbers embedded
+  /// in the sentence (degrees, ppm, %) change on every sensor update. The
+  /// keywords track the wording in ThresholdAnalyzer.generatePreSleepSuggestions
+  /// on the backend — if that wording changes, these have to change with it.
   static _SuggestionRule _matchSuggestionRule(String msg) {
-    if (msg.contains('CO₂') || msg.contains('CO2')) {
+    final m = msg.toLowerCase();
+
+    if (m.contains('co2') || m.contains('co₂')) {
       return _SuggestionRule(
         factorKey: 'CO2_HIGH',
         icon: Icons.air,
-        actionLabel: 'เปิดหน้าต่างระบายอากาศ',
-        intro: 'อากาศในห้องเริ่มอับ ระบายอากาศก่อนเข้านอนจะช่วยให้หลับสบายขึ้น',
+        actionLabel: 'Open a window',
+        intro: 'The air in here is getting stale. Airing the room out before '
+            'bed will help you sleep more soundly.',
       );
     }
-    if (msg.contains('อุณหภูมิสูง')) {
+    if (m.contains('temperature is too high')) {
       return _SuggestionRule(
         factorKey: 'TEMP_HIGH',
         icon: Icons.thermostat_outlined,
-        actionLabel: 'เปิดพัดลม/แอร์',
-        intro: 'ห้องร้อนเกินช่วงที่เหมาะกับการนอน ลดอุณหภูมิลงก่อนเข้านอนดีกว่า',
+        actionLabel: 'Turn on the fan or AC',
+        intro: 'The room is warmer than is comfortable for sleep. Cool it down '
+            'before you turn in.',
       );
     }
-    if (msg.contains('อุณหภูมิต่ำ')) {
+    if (m.contains('temperature is too low')) {
       return _SuggestionRule(
         factorKey: 'TEMP_LOW',
         icon: Icons.thermostat_outlined,
-        actionLabel: 'เพิ่มความอบอุ่นในห้อง',
-        intro: 'ห้องเย็นเกินไป เพิ่มความอบอุ่นสักหน่อยจะนอนหลับได้เต็มอิ่มกว่า',
+        actionLabel: 'Warm the room up',
+        intro: 'The room is colder than is comfortable. A little more warmth '
+            'will help you sleep through.',
       );
     }
-    if (msg.contains('ความชื้นสูง')) {
+    if (m.contains('humidity is high')) {
       return _SuggestionRule(
         factorKey: 'HUMIDITY_HIGH',
         icon: Icons.water_drop_outlined,
-        actionLabel: 'เปิดเครื่องลดความชื้น',
-        intro: 'ความชื้นสูงเกินไป เสี่ยงอับชื้นและนอนไม่สบายตัว',
+        actionLabel: 'Run a dehumidifier',
+        intro: 'Humidity is above the comfortable range — damp air makes for a '
+            'clammy night.',
       );
     }
-    if (msg.contains('ความชื้นต่ำ')) {
+    if (m.contains('humidity is low')) {
       return _SuggestionRule(
         factorKey: 'HUMIDITY_LOW',
         icon: Icons.water_drop_outlined,
-        actionLabel: 'เปิดเครื่องเพิ่มความชื้น',
-        intro: 'อากาศแห้งเกินไป อาจทำให้ระคายคอระหว่างนอน',
+        actionLabel: 'Run a humidifier',
+        intro: 'The air is dry enough that it may leave your throat irritated '
+            'by morning.',
       );
     }
-    if (msg.contains('PM2.5') || msg.contains('ฝุ่น')) {
+    if (m.contains('pm2.5') || m.contains('dust')) {
       return _SuggestionRule(
         factorKey: 'PM25_HIGH',
         icon: Icons.speed_outlined,
-        actionLabel: 'เปิดเครื่องฟอกอากาศ',
-        intro: 'ฝุ่น PM2.5 สูงเกินค่าที่ปลอดภัย ควรฟอกอากาศก่อนนอน',
+        actionLabel: 'Turn on the air purifier',
+        intro: 'PM2.5 is above the safe level. Filter the air before sleeping.',
       );
     }
-    if (msg.contains('แสงสว่าง')) {
+    if (m.contains('bright') || m.contains('light')) {
       return _SuggestionRule(
         factorKey: 'LIGHT_HIGH',
         icon: Icons.wb_sunny_outlined,
-        actionLabel: 'ปิดไฟ/ปิดม่าน',
-        intro: 'ห้องยังสว่างเกินไปสำหรับการนอนหลับที่มีคุณภาพ',
+        actionLabel: 'Dim the lights',
+        intro: 'The room is still too bright for good quality sleep.',
       );
     }
-    if (msg.contains('เสียง')) {
+    if (m.contains('noise')) {
       return _SuggestionRule(
         factorKey: 'NOISE_HIGH',
         icon: Icons.volume_up_outlined,
-        actionLabel: 'ลดเสียงรบกวน',
-        intro: 'มีเสียงรบกวนเกินระดับที่เหมาะกับการนอน',
+        actionLabel: 'Reduce the noise',
+        intro: 'Background noise is above the level that suits sleep.',
       );
     }
-    // ไม่เข้าเงื่อนไขที่รู้จัก — ใช้ข้อความเดิมจาก backend ตรงๆ แต่ยังให้กด
-    // "รับทราบ" ได้เพื่อคงพฤติกรรม smart-suggestion แบบเดียวกัน
-    return _SuggestionRule(
+
+    // Nothing recognised — show the backend's own wording, but still let the
+    // user acknowledge it so the card behaves consistently.
+    return const _SuggestionRule(
       factorKey: 'OTHER',
       icon: Icons.light_mode_outlined,
-      actionLabel: 'รับทราบ',
+      actionLabel: 'Got it',
       intro: null,
     );
   }
 
-  /// MorningReportDto → MorningReport (UI)
+  /// MorningReportDto to the Home summary card.
   static MorningReport toMorningReport(MorningReportDto d) {
     return MorningReport(
       title: 'Morning Report',
@@ -282,14 +297,14 @@ class DashboardMapper {
     );
   }
 
-  // ── format & status helpers ──
+  // ── Format and status helpers ──
   static String _fmt(double v) => v.toStringAsFixed(1);
 
   static String _tempStatus(double t, double min, double max,
       double criticalMin, double criticalMax) {
     if (t < criticalMin || t > criticalMax) return 'Critical';
-    // "Optimal" คือช่วงกลางของ comfort range (ให้ผลใกล้เคียงของเดิมที่เคย
-    // hardcode 20-24 ไว้ แต่ปรับตามช่วงที่ผู้ใช้ตั้งจริง)
+    // "Optimal" is the middle of the comfort range. This tracks whatever range
+    // the user configured instead of the old hardcoded 20-24.
     final mid = (min + max) / 2;
     final tightLo = mid - (max - min) / 6;
     final tightHi = mid + (max - min) / 6;
@@ -303,7 +318,7 @@ class DashboardMapper {
     return 'Warning';
   }
 
-  /// ใช้กับค่าที่ยิ่งสูงยิ่งแย่ทางเดียว (CO2) — คืนข้อความสถานะ
+  /// Status text for values that only get worse in one direction (CO2).
   static String _thresholdStatus(double v, double warning, double critical) {
     if (v < warning) return 'Optimal';
     if (v < critical) return 'Warning';
@@ -322,16 +337,14 @@ class DashboardMapper {
     return 'Loud';
   }
 
-  /// เช็คว่า factor นี้ (จาก AlertDto.factor เช่น "TEMPERATURE", "CO2") ยัง
-  /// วิกฤตอยู่จริงหรือไม่ เทียบกับค่า sensor + threshold "ปัจจุบัน" — ไม่ใช่ค่า
-  /// value/threshold ที่บันทึกแช่แข็งไว้ตอนสร้าง alert แถวนั้น
+  /// Is this factor (from AlertDto.factor, e.g. "TEMPERATURE", "CO2") still
+  /// critical against the *current* reading and thresholds — rather than the
+  /// value and threshold frozen into the alert row when it was created?
   ///
-  /// backend เก็บ alert เป็น log ประวัติศาสตร์ล้วนๆ (ไม่มีสถานะ
-  /// resolved/active — ดู AlertRepository.findRecentByDevice) ดังนั้นถ้าผู้ใช้
-  /// เพิ่งปรับ threshold ใหม่ให้กว้างขึ้น alert แถวเก่าที่เคยวิกฤตภายใต้
-  /// threshold เดิมก็จะยังถูกส่งกลับมาใน "recent alerts" อยู่ดี ทั้งที่ค่า
-  /// ปัจจุบันไม่วิกฤตแล้วภายใต้ threshold ใหม่ — ฟังก์ชันนี้ใช้กรองแถวแบบนั้น
-  /// ออกก่อนจะบังคับเด้ง popup ซ้ำ
+  /// Needed when falling back to /recent, which is a plain history log. If the
+  /// user has since widened a threshold, an old row that was critical under the
+  /// previous settings still comes back from that endpoint even though the
+  /// current value is fine. This filters those out before forcing a popup.
   static bool isFactorCritical(
     String factor,
     SensorDataDto d, {
@@ -363,15 +376,16 @@ class DashboardMapper {
       case 'NOISE':
         return d.noiseLevel >= noiseCritical;
       default:
-        // factor ที่ไม่รู้จัก — ไม่มีข้อมูลพอจะเช็คซ้ำ เชื่อ backend ไปก่อน
+        // Unknown factor — not enough information to re-check, so trust the
+        // backend.
         return true;
     }
   }
 
-  /// เหมือน [isFactorCritical] แต่รองรับ WARNING ด้วย — ใช้เฉพาะตอน fallback
-  /// (backend เก่ายังไม่มี endpoint /active) ตอนกรอง /recent ฝั่ง client เอง
-  /// factor ระดับ CRITICAL เช็คกับ critical bound, ระดับ WARNING เช็คกับ
-  /// warning bound (เกณฑ์เดียวกับ toSensorReadings)
+  /// Like [isFactorCritical] but also handles WARNING. Used only on the fallback
+  /// path, where an older backend has no /active endpoint and /recent has to be
+  /// filtered client-side. CRITICAL rows check against the critical bounds and
+  /// WARNING rows against the warning bounds, matching toSensorReadings.
   static bool isFactorStillFlagged(
     String factor,
     String level,
@@ -411,8 +425,8 @@ class DashboardMapper {
   }
 }
 
-/// กติกาแปลงข้อความ suggestion ดิบจาก backend → smart suggestion 1 factor
-/// (ไอคอน, factor key คงที่, action label, ประโยคแนะนำแบบอ่านง่าย)
+/// One rule for turning a raw backend suggestion into a single-factor smart
+/// suggestion: icon, stable factor key, action label and a readable lead-in.
 class _SuggestionRule {
   final String factorKey;
   final IconData icon;
@@ -426,8 +440,9 @@ class _SuggestionRule {
     required this.intro,
   });
 
-  /// ประกอบข้อความสุดท้าย: ประโยคแนะนำแบบอ่านง่าย (ถ้ามี) + ค่าที่วัดได้จริงจาก
-  /// backend ต่อท้าย เพื่อให้เห็นทั้ง "ทำไมต้องทำ" และ "ตัวเลขจริงตอนนี้"
+  /// Final message: the readable lead-in (when there is one) followed by the
+  /// backend's own line, so the user sees both why it matters and the real
+  /// number behind it.
   String buildMessage(String raw) {
     if (intro == null) return raw;
     return '$intro\n$raw';
