@@ -31,11 +31,11 @@
 #include <HardwareSerial.h>
 
 
-const char* WIFI_SSID     = "Latcharit";
-const char* WIFI_PASSWORD = "itimLOOK2547";
+const char* WIFI_SSID     = "Racharit";
+const char* WIFI_PASSWORD = "123456789";
 
 
-const char* SERVER_URL = "http://192.168.1.5:8080/api/sensor/data";
+const char* SERVER_URL = "http://172.20.10.3:8080/api/sensor/data";
 
 const char* DEVICE_ID = "test-device-01";
 
